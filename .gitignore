@@ -1,0 +1,33 @@
+# Carpetas de caché de Python
+__pycache__/
+
+# Archivos de sesión generados por la aplicación
+session.json
+alarms_session.json
+
+# Resultados de tests y logs de Robot Framework
+test_results/
+interactive_console_output.xml
+
+# Historial de traps (parece una base de datos generada)
+trap_history/
+
+# MIBs compiladas (son generadas, no código fuente)
+compiled_mibs/
+logic/compiled_mibs/
+
+# Carpetas y archivos de versiones antiguas
+lanzador de pruebas_antiguo/
+lanzador_pruebas_v4.5.py
+# lanzador_pruebas_V5.py
+logic/snmp_handler_NO VALE.py
+
+# Archivos de IDE y configuración local (Visual Studio)
+.vs/
+*.suo
+*.user
+.vscode/
+
+# Logs de Selenium
+geckodriver.log
+chromedriver.log

@@ -1,0 +1,41 @@
+[
+    {
+        "on_fail": "stop",
+        "type": "robot_test",
+        "name": "TEST: List Detected Modules",
+        "test_name": "List Detected Modules",
+        "filename": "Basic_Configuration_Tests_2.robot",
+        "variables": []
+    },
+    {
+        "on_fail": "stop",
+        "type": "robot_test",
+        "name": "TEST: Retrieve Inputs Activation State",
+        "test_name": "Retrieve Inputs Activation State",
+        "filename": "InputActivation.robot",
+        "variables": []
+    },
+    {
+        "on_fail": "stop",
+        "type": "robot_test",
+        "name": "TEST: Input Activation",
+        "test_name": "Input Activation",
+        "filename": "InputActivation.robot",
+        "variables": [
+            "ACTIVATE_DEACTIVATE:1",
+            "DURATION:10",
+            "INPUTS_LIST:[0,1,0,1,0]"
+        ]
+    },
+    {
+        "on_fail": "stop",
+        "type": "delay",
+        "name": "PAUSA: 12 segundos",
+        "duration": "12"
+    },
+    {
+        "on_fail": "stop",
+        "type": "check_snmp_traps",
+        "name": "VERIFICAR: Traps SNMP Nuevos"
+    }
+]
