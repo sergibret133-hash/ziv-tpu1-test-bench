@@ -368,12 +368,52 @@ class MonitoringController:
         chrono_text_report = "--- REPORTE DEL REGISTRO CRONOLÓGICO ---\n"
         chrono_text_report += "\n".join(chrono_report)
         chrono_text_report += "\n\n--- DATOS EN BRUTO ---\n"
-        chrono_text_report += "\n".join(chrono_data) if chrono_data else "Sin datos."
+        
+        if isinstance(chrono_data, list) and chrono_data:
+            formatted_lines = []
+            for entry in chrono_data:
+                # Aseguramos que 'entry' sea un diccionario antes de usar .get()
+                if isinstance(entry, dict):
+                    ts = entry.get('timestamp', 'N/A')
+                    event = entry.get('alarm_event', 'N/A')
+                    formatted_lines.append(f"Timestamp: {ts} | Evento: {event}")
+                elif isinstance(entry, str):
+                    formatted_lines.append(entry) # Si ya era un string
+                    
+            chrono_text_report += "\n".join(formatted_lines)
+
+        elif isinstance(chrono_data, str):
+            chrono_text_report += chrono_data # Si ya era un string (ej. un error)
+        else:
+            chrono_text_report += "Sin datos."
         
         trap_text_report = "--- REPORTE DE TRAPS SNMP ---\n"
         trap_text_report += "\n".join(trap_report)
         trap_text_report += "\n\n--- DATOS EN BRUTO ---\n"
-        trap_text_report += "\n---\n".join(trap_data) if trap_data else "Sin datos."
+
+        # como lo que se espera es un str, tenemos que convertir el diccionario a cadena de str
+        if isinstance(trap_data, list) and trap_data:   # Si hay datos y el tipo de dato de trap_data tiene formato de lista
+                    formatted_text = ""
+                    for i, trap in enumerate(trap_data):
+                        formatted_text += f"--- Trap #{i+1} ---\n"  # Numeramos el trap que estamos recorriendo.
+                        if isinstance(trap, dict): # Si el trap que recorremos es un diccionario
+                            for key, value in trap.items(): # Recorremos cada una de sus claves
+                                if key == 'varbinds_dict' and isinstance(value, dict):  # Si se trata de varbinds_dict, verificando que sea un diccionario  (es un diccionario dentro del diccionario principal del trap)
+                                    formatted_text += f"  {key}:\n" # Por cada clave ->
+                                    for vk, vv in value.items():
+                                        formatted_text += f"    {vk}: {vv}\n"   # -> Vamos añadiendo cada uno de los elementos de esa clave.
+                                else:
+                                    formatted_text += f"  {key}: {value}\n"
+                        elif isinstance(trap, str): # Si el trap que recorremos no es un diccionario
+                            formatted_text += f"{trap}\n"   # Lo añadimos directamente
+                        formatted_text += "\n"
+                    trap_text_report += formatted_text
+        elif isinstance(trap_data, str):    # Si TODOS los traps ya estan en formato string, no hace falta que hagamos nada. Podemos pasar el report hecho por el parser directamente.
+            trap_text_report += trap_data
+        else:
+            trap_text_report += "Sin datos."
+
+
         
         # --- Veredicto Final ---
         if (chrono_act_ok and chrono_deact_ok and trap_act_ok and trap_deact_ok):
