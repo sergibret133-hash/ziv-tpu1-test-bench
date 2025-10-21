@@ -440,6 +440,9 @@ def _populate_db_viewer_tab(app_ref, tab_frame):
     app_ref.db_display_textbox = ctk.CTkTextbox(tab_frame, state="disabled", wrap="none")
     app_ref.db_display_textbox.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="nsew")
 
+
+# ********** SNMPvsChrono_Correlation_Display **********
+
 def _populate_event_correlation_tab(app_ref, tab_frame):
     """Crea los widgets para la función de análisis de correlación de datos provenientes de SNMP y el Registro Cronológico."""
 
@@ -476,3 +479,21 @@ def _populate_event_correlation_tab(app_ref, tab_frame):
     # --- 3. Veredicto Final ---
     app_ref.corr_result_label = ctk.CTkLabel(results_frame, text="Resultado: PENDIENTE", font=ctk.CTkFont(size=16, weight="bold"), text_color="gray")
     app_ref.corr_result_label.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+    
+def _update_correlation_display(app_ref, chrono_report, trap_report, result, color):
+    """Actualiza la GUI de Correlación de Eventos con los resultados del test."""
+    
+    # 1. Actualizar la etiqueta de Veredicto
+    app_ref.corr_result_label.configure(text=f"Resultado: {result}", text_color=color)
+
+    # 2. Actualizar TextBox de Cronológico
+    app_ref.corr_chrono_textbox.configure(state="normal")
+    app_ref.corr_chrono_textbox.delete("1.0", "end")
+    app_ref.corr_chrono_textbox.insert("1.0", chrono_report)
+    app_ref.corr_chrono_textbox.configure(state="disabled")
+
+    # 3. Actualizar TextBox de SNMP
+    app_ref.corr_snmp_textbox.configure(state="normal")
+    app_ref.corr_snmp_textbox.delete("1.0", "end")
+    app_ref.corr_snmp_textbox.insert("1.0", trap_report)
+    app_ref.corr_snmp_textbox.configure(state="disabled")

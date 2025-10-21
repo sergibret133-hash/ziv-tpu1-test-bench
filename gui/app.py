@@ -302,6 +302,12 @@ class ModernTestRunnerApp(ctk.CTk):
                     ui_tab_scheduler._update_scheduler_log(self, message[1], message[2])
                 elif msg_type == 'update_alarms_display':
                     ui_tab_alarms.update_alarms_display(self, message[1])
+                elif msg_type == 'update_correlation_display':
+                    # message[1] = chrono_text_report
+                    # message[2] = trap_text_report
+                    # message[3] = result
+                    # message[4] = color
+                    ui_tab_monitoring._update_correlation_display(self, message[1], message[2], message[3], message[4])
 
         except queue.Empty:
             pass    # Si no hay mensajes no hacemos nada
