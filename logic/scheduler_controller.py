@@ -265,6 +265,8 @@ class SchedulerController:
         Motor de ejecución de la secuencia de tareas.
         NOTA: Este método se ejecuta en un hilo secundario.
         """
+        self.app_ref.is_main_task_running = True
+        
         sequence_failed = False
         xml_files = []
 
@@ -436,6 +438,10 @@ class SchedulerController:
             self.app_ref.gui_queue.put(('main_status', final_message, final_color))
             
             self.app_ref.gui_queue.put(('enable_buttons', None)) # Rehabilitamos botones
+            
+
+            self.app_ref.is_main_task_running = False
+            self.app_ref.gui_queue.put(('enable_buttons', None))
                 
     
 

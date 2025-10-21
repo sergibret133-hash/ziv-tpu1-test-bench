@@ -65,6 +65,9 @@ class AlarmsController:
 
     def _full_monitoring_cycle(self):
         """Gestiona el ciclo de vida completo: abre navegador, monitoriza, cierra navegador."""
+        
+        self.app_ref.is_main_task_running = True
+        # self.app_ref.gui_queue.put(('enable_buttons', None))
         try:
             self.app_ref.gui_queue.put(('main_status', "Iniciando navegador de alarmas...", "orange"))
             if not self._start_alarms_browser(): # Aqui lanzamos start_browser.robot para iniciar una nueva sesión de navegador para las alarmas
@@ -76,6 +79,7 @@ class AlarmsController:
         except Exception as e:
             error_msg = f"Error crítico en ciclo de alarmas: {e}"
             self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
+            
         finally: # Al finalizar (ya sea por error o por detención), cerramos el navegador de alarmas, pasandole el archivo de sesión del navegador de alarmas
             self.app_ref.gui_queue.put(('main_status', "Cerrando navegador de alarmas...", "orange"))
             if self.alarms_browser_process:
@@ -94,7 +98,7 @@ class AlarmsController:
             
             self.app_ref.gui_queue.put(('main_status', "Monitorización de alarmas detenida.", "white"))
 
-
+            self.app_ref.is_main_task_running = False
 
     # def _monitoring_loop(self):
     #     """Bucle que se ejecuta en segundo plano para obtener las alarmas."""

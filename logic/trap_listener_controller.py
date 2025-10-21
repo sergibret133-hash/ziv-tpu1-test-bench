@@ -85,5 +85,13 @@ class TrapListenerController:
         self.app_ref.trap_receiver.clear_all_received_traps()
         self.app_ref.update_trap_display([])
         self.app_ref._update_status("Traps en vivo borrados.", "white")
-        
+    
+    # Para poder captar los traps y compararlos en la Correlacion de Eventos de traps SNMP con eventos del Registro Cronológico, NECESITAMOS REALIZAR UNA FUNCION NUEVA QUE OBTENGA LOS DATOS QUE DESDE LA GUI, 
+    # Y NO DIRECTAMENTE DESDE  _show_all_traps (YA QUE PUEDE INTERFERIR CON EL FUNCIONAMIENTO DE LA GUI)
+    def get_raw_traps_for_correlation(self):
+            """Obtiene los traps crudos recibidos sin actualizar la GUI."""
+            if self.app_ref.trap_receiver:
+                # Llama al método que realmente tiene los datos en Trap_Receiver_GUI_oriented
+                return self.app_ref.trap_receiver.get_all_raw_received_traps()
+            return []
     

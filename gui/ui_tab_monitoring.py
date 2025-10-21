@@ -13,12 +13,14 @@ def create_monitoring_tab(app_ref):
     tab_view.add("SNMP")
     tab_view.add("Chronological Register")
     tab_view.add("Historial de Traps (BD)")
+    tab_view.add("Correlación de Eventos")
+    
     
     # 2. Delegar el rellenado de cada sub-pestaña a su función correspondiente
     _populate_snmp_tab(app_ref, tab_view.tab("SNMP"))
     _populate_chrono_register_tab(app_ref, tab_view.tab("Chronological Register"))
     _populate_db_viewer_tab(app_ref, tab_view.tab("Historial de Traps (BD)"))
-    
+    _populate_event_correlation_tab(app_ref, tab_view.tab("Correlación de Eventos"))
     # 3. Devolver el TabView ya construido y rellenado
     return tab_view
 
@@ -438,3 +440,39 @@ def _populate_db_viewer_tab(app_ref, tab_frame):
     app_ref.db_display_textbox = ctk.CTkTextbox(tab_frame, state="disabled", wrap="none")
     app_ref.db_display_textbox.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="nsew")
 
+def _populate_event_correlation_tab(app_ref, tab_frame):
+    """Crea los widgets para la función de análisis de correlación de datos provenientes de SNMP y el Registro Cronológico."""
+
+    tab_frame.grid_columnconfigure(0, weight=1)
+    tab_frame.grid_rowconfigure(1, weight=1)
+
+    controls_frame = ctk.CTkFrame(tab_frame)
+    controls_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+
+    # Guardamos la referencia del botón en app_ref para poder deshabilitarlo
+    app_ref.correlation_button = ctk.CTkButton(
+        controls_frame, 
+        text="▶️ Iniciar Test de Correlación (Activar Entrada 1)", 
+        command=app_ref.monitoring_controller.start_correlation_test
+    )
+    app_ref.correlation_button.pack(fill="x", padx=5, pady=5)
+
+    # --- 2. Frame de Resultados (Visores) ---
+    results_frame = ctk.CTkFrame(tab_frame, fg_color="transparent")
+    results_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+    results_frame.grid_columnconfigure((0, 1), weight=1)
+    results_frame.grid_rowconfigure(1, weight=1)
+
+    # Columna para el Registro Cronológico
+    ctk.CTkLabel(results_frame, text="Registro Cronológico", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=5, pady=5)
+    app_ref.corr_chrono_textbox = ctk.CTkTextbox(results_frame, state="disabled", wrap="word")
+    app_ref.corr_chrono_textbox.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+
+    # Columna para los Traps SNMP
+    ctk.CTkLabel(results_frame, text="Traps SNMP Recibidos", font=ctk.CTkFont(weight="bold")).grid(row=0, column=1, padx=5, pady=5)
+    app_ref.corr_snmp_textbox = ctk.CTkTextbox(results_frame, state="disabled", wrap="word")
+    app_ref.corr_snmp_textbox.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+
+    # --- 3. Veredicto Final ---
+    app_ref.corr_result_label = ctk.CTkLabel(results_frame, text="Resultado: PENDIENTE", font=ctk.CTkFont(size=16, weight="bold"), text_color="gray")
+    app_ref.corr_result_label.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
