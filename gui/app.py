@@ -45,10 +45,6 @@ from logic.trap_listener_controller import TrapListenerController
 from logic.alarms_controller import AlarmsController
 # from logic.session_controller import SessionController
 
-# v4_CAMBIOS:
-# -> Reorganización del codigo
-# -> GUI debe hacer Pull Check para comprobar popup sesion expirada. En caso afirmativo, debe introducir la constraseña automaticamente. 
-# -> Añadida Sección Alarmas
 
 # --- CONFIGURATION ---
 TEST_DIRECTORY = "tests"
@@ -131,7 +127,7 @@ class ModernTestRunnerApp(ctk.CTk):
                 "${CHRONO_ORDER}"
             ],
 
-            # --- Tests de Módulo IBTU ---
+            # --- Tests de Módulo IBTU BYTONES ---
             "Retrieve IBTU ByTones Full Configuration": [],
             "Program IBTU ByTones S1 General": [
                 "${RX_OPERATION_MODE}", 
@@ -149,6 +145,21 @@ class ModernTestRunnerApp(ctk.CTk):
                 "${BY_TONES_INPUT_LEVEL}", 
                 "${BY_TONES_POWER_BOOSTING}", 
                 "${BY_TONES_OUTPUT_LEVEL}"
+            ],
+            
+            "Retrieve IBTU FFT Full Configuration": [],
+            "Program IBTU FFT S1 General": [
+                "${LOCAL_PERIODICITY}", 
+                "${REMOTE_PERIODICITY}", 
+                "${SNR_THRESHOLD_ACTIVATION}", 
+                "${SNR_THRESHOLD_DEACTIVATION}",
+                "${OPERATION_MODE_CMD}",
+                "${OPERATION_MODE}"
+                
+            ],
+            "Program IBTU FFT S2 Times": [
+            ],
+            "Program IBTU FFT S3 Levels": [
             ],
         }
 

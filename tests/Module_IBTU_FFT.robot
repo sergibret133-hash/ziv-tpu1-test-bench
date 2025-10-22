@@ -37,7 +37,7 @@ ${URL_BASE}    https://
 # ${terminal_title}    EUT Setup 2
 # ${IP_ADDRESS}    10.212.43.21
 
-${terminal_title}    EUT Setup 1
+# ${terminal_title}    EUT Setup 1
 ${IP_ADDRESS}    10.212.43.87
 
 ${URL_COMPLETA}=    ${URL_BASE}${USER}:${PASS}@${IP_ADDRESS}
@@ -76,123 +76,98 @@ ${LOGOUT_SURE}   xpath=//button[contains(@class, 'p-button p-component p-confirm
 ${TPU_IMG}    xpath=//img[contains(@src, './static/media/tpu-1-300x130.868f04f7.jpg')]
 # ${options}=  Create List  --ignore-certificate-errors  --disable-web-security  --allow-running-insecure-content
 ${commands}    Input/Output Alias
-
 #************************************************************************************************************************
 #BASIC CONFIGURATION TESTS
 ${SELECT_BUTTON}    xpath=//button[contains(text(),'Select')]
 
+#************************************************************************************************************************
+# MODULE CONFIG VARIABLES
+#1st Section
+
+${LOCAL_PERIODICITY}    0
+${REMOTE_PERIODICITY}    0
+
+${SNR_THRESHOLD_ACTIVATION}    0
+${SNR_THRESHOLD_DEACTIVATION}    3
+
+${RX_OPERATION_MODE_LIST_STR}    ${EMPTY}
+
+#2nd Section
+# RX
+${RX_GUARD_FREQ}    0
+${RX_BW}    1
+
+${RX_APPLICATION_MODE_LIST_STR}    ${EMPTY}
+
+# TX
+${TX_GUARD_FREQ}    0
+${TX_BW}    1
+
+${TX_APPLICATION_MODE_LIST_STR}    ${EMPTY}
+
+#3rd Section
+${INPUT_LEVEL}    0
+${OUTPUT_LEVEL}    0
+${POWER_BOOSTING}    0
+
+
+
 
 *** Test Cases ***
-Check if Telep available and Open Section
-    Setup Folder Section
-    ${Telep_name_to_config}=    Set Variable    IBTU
-    ${available_modules}=    Detect Available Modules
-    ${available_modules_names}=    Set Variable    ${available_modules}[0]    # It's a list!
-    ${available_modules_commands}=    Set Variable    ${available_modules}[1]    # It's a list!
-
-    ${Telep_number_to_config}    Check if Telep available and Return TP ID    ${Telep_name_to_config}    ${available_modules_names}
-    Set Suite Variable    ${available_modules_commands}
-    Set Suite Variable    ${Telep_number_to_config}
-Open Line Interface Section
-    Setup Folder Section
-    Open Line Interface Section Associated To Teleprotection    ${Telep_number_to_config}
-    Sleep    1s
-
 #*************************************************************************************************************************
-# PRUEBAS
-# 1st Section
-# Reception Operation Mode
-#     Autoconfig Reception Operation Mode    1    ${Telep_number_to_config}    ${available_modules_commands}
-#     Sleep    2s
-# INVALID LOCAL Automatic Link Test Periodicity
-#     LOCAL Automatic Link Test Periodicity Assign    25
-#     Sleep    2s
-# LOCAL Automatic Link Test Periodicity
-#     LOCAL Automatic Link Test Periodicity Assign    0
-#     Sleep    2s
-# REMOTE Automatic Link Test Periodicity
-#     REMOTE Automatic Link Test Periodicity Assign    0
-#     Sleep    2s
-# INVALID Activation & Deactivation Threshold Assign for Low SNR
-#     Activation Threshold Assign for low Snr Ratio Alarm    -3
-#     Sleep    2s
-# Activation & Deactivation Threshold Assign for Low SNR
-#     Activation Threshold Assign for low Snr Ratio Alarm    0
-#     Sleep    2s
-#     Deactivation Threshold Assign for low Snr Ratio Alarm    3
-#     Sleep    2s
-# Programm
-#     Program Old    sCOM
+Retrieve IBTU FFT Full Configuration
+    Setup Folder Section
+    Retrieve IBTU_FFT Module
+Program IBTU FFT S1 General
+    Setup Folder Section
+    
+    LOCAL Automatic Link Test Periodicity Assign    ${LOCAL_PERIODICITY}
+    REMOTE Automatic Link Test Periodicity Assign    ${REMOTE_PERIODICITY}
+    
+    Activation Threshold Assign for low Snr Ratio Alarm    ${SNR_THRESHOLD_ACTIVATION}
+    Deactivation Threshold Assign for low Snr Ratio Alarm    ${SNR_THRESHOLD_DEACTIVATION}
+
+    Process Reception Operation Mode    ${RX_OPERATION_MODE_LIST_STR}
+    
+    Program Old    sCOM
+
 #*************************************************************************************************************************
 # 2nd Section
-# TX Bandwith Assign
-#     Bandwith Assignation    1    1
-#     Sleep    2s
-# RX Bandwith Assign
-#     Bandwith Assignation    2    0
-#     Sleep    2s
-# Invalid RX Bandwith Assignation
-#     Bandwith Assignation    1    3
-#     Sleep    2s
-# Invalid RX Bandwith Assignation
-#     Bandwith Assignation    4    0
-#     Sleep    2s
+Program IBTU FFT S2 General
+    Setup Folder Section
+    # TX
+    Bandwith Assignation    ${TX_BW}    1    
+    ${tx_frequencies_list}    Open TX Guard Frequencies and Show Them
+    Frequency Selection    ${TX_GUARD_FREQ}    ${tx_frequencies_list}
+    Process TX Application Mode    ${TX_APPLICATION_MODE_LIST_STR}
 
-# Local TX guard frequency
-#     ${frequencies_list}    Open TX Guard Frequencies and Show Them
-#     Frequency Selection    1100    ${frequencies_list}
-#     Sleep    2s
-# Invalid Local TX guard frequency
-#     ${frequencies_list}    Open TX Guard Frequencies and Show Them
-#     Frequency Selection    9902    ${frequencies_list}
-#     Sleep    2s
-# Local RX guard frequency
-#     ${frequencies_list}    Open RX Guard Frequencies and Show Them
-#     Frequency Selection    2450    ${frequencies_list}
-#     Sleep    2s
-# Invalid Local RX guard frequency
-#     ${frequencies_list}    Open RX Guard Frequencies and Show Them
-#     Frequency Selection    9902    ${frequencies_list}
-#     Sleep    2s
-# Autoconfig TX Channels Application
-#     Autoconfig Application Type    1    0    ${Telep_number_to_config}    ${available_modules_commands}    # Application_operation_mode 0: Blocking
-#     Sleep    2s
-# Autoconfig RX Channels Application
-#     Autoconfig Application Type    0    2    ${Telep_number_to_config}    ${available_modules_commands}    # Application_operation_mode 2: Direct
-#     Sleep    2s
-# Programm
-#     Program Old    sCOM
+    # RX
+    Bandwith Assignation    ${RX_BW}    0   
+    ${rx_frequencies_list}    Open RX Guard Frequencies and Show Them
+    Frequency Selection    ${RX_GUARD_FREQ}    ${rx_frequencies_list}
+    Process RX Application Mode    ${RX_APPLICATION_MODE_LIST_STR}
 
-# Copy RX To TX
-#     Copy From Reception Frequencies
-# PreCopy Tx To RX
-#     Autoconfig Application Type    1    1    ${Telep_number_to_config}    ${available_modules_commands}    # Application_operation_mode 1: Permissive
-# Copy Tx To Rx
-#     Copy From Transmission Frequencies
+    Program Old    sCOM
+
+Copy RX To TX
+    Setup Folder Section
+    Copy From Reception Frequencies
+
+Copy Tx To Rx
+    Setup Folder Section
+    Copy From Transmission Frequencies
 #*************************************************************************************************************************
 # 3rd Section
-Assign Input Level
-    Input Level    -8
-    Sleep    2s
+Program IBTU FFT S3 General
+    Input Level    ${INPUT_LEVEL}
 
-Assign Power Boosting
-    Power Boosting    1
-    Sleep    2s
+    Power Boosting    ${POWER_BOOSTING}
 
-Assign Output Level
-    Output Level    -2
-    Sleep    2s
+    Output Level    ${OUTPUT_LEVEL}
 
-Invalid Assign Power Boosting
-    Log To Console    Proceed to Introduce a Invalid PowerBoosting number
-    Sleep    1s
-    Power Boosting    3
-    Sleep    2s
-
-Programm
     Program Old    sCOM
     Check If Alert Appears and Handle It
-    Sleep    2s
+
 
 #*************************************************************************************************************************
 
@@ -202,8 +177,22 @@ Setup Folder Section
     Click Open Folder    EQUIPMENT
     Open Section    Basic Configuration
     Wait Section Title    BASIC CONFIGURATION
-    Sleep    5s
+    Sleep    1s
 
+    Check if Telep available and Open Section
+    Open Line Interface Section
+Check if Telep available and Open Section
+    ${Telep_name_to_config}=    Set Variable    IBTU
+    ${available_modules}=    Detect Available Modules
+    ${available_modules_names}=    Set Variable    ${available_modules}[0]    # It's a list!
+    ${available_modules_commands}=    Set Variable    ${available_modules}[1]    # It's a list!
+
+    ${Telep_number_to_config}    Check if Telep available and Return TP ID    ${Telep_name_to_config}    ${available_modules_names}
+    Set Suite Variable    ${available_modules_commands}
+    Set Suite Variable    ${Telep_number_to_config}
+
+Open Line Interface Section
+    Open Line Interface Section Associated To Teleprotection    ${Telep_number_to_config}
 
 Get Full Matching Element
     [Arguments]    ${substring_to_find}    ${list_to_search}
@@ -212,9 +201,17 @@ Get Full Matching Element
 
 Open Broswer to Login page
     [Arguments]    ${url}    ${brows}
-    Open Browser    ${url}    ${brows}    options=add_argument("--ignore-certificate-errors")
+    # Crea un objeto de opciones de Chrome
+    ${chrome_options}=    Evaluate    sys.modules['selenium.webdriver'].ChromeOptions()    sys, selenium.webdriver
+
+    # Añade todos los argumentos de tu lista @{options}
+    FOR    ${option}    IN    @{options}
+        Call Method    ${chrome_options}    add_argument    ${option}
+    END
+
+    Open Browser    ${url}    browser=${brows}    options=${chrome_options}
     Maximize Browser Window
-    
+
 Close Browser
     Close All Browsers
 Type In Username
@@ -272,22 +269,9 @@ Scroll Until Visible
         Sleep    0.2s
         ${visible}    Run Keyword And Return Status    Element Should Be Visible    ${locator}
     END
-    Sleep    1s
+    # Sleep    1s
 
-Assign input/output to command
-    [Arguments]    ${input}    ${command}
-    #//div[contains(text(), "${input}")]:primero encuentra el texto input para cualquier <div> y seguidamente 
-    #/ancestor-or-self::tr:  Busca el elemento <tr> (fila de tabla) más cercano, subiendo en la jerarquía del DOM.
-    Scroll Element Into View Softly    xpath=//div[contains(text(), "${input}")]/ancestor::tr//following::input[contains(@type, 'checkbox')][${command}]
-    Select Checkbox    xpath=//div[contains(text(), "${input}")]/ancestor-or-self::tr//following::input[contains(@type, 'checkbox')][${command}]
-    Sleep    0.1s
 
-Unassign input/ouptut to command
-    [Arguments]    ${input}    ${command}
-    Scroll Element Into View Softly    xpath=//div[contains(text(), "${input}")]/ancestor::tr//following::input[contains(@type, 'checkbox')][${command}]
-    Unselect Checkbox    xpath=//div[contains(text(), "${input}")]/ancestor-or-self::tr//following::input[contains(@type, 'checkbox')][${command}]
-    Sleep    0.1s
- 
 
 Scroll Element Into View Softly
     [Arguments]    ${locator}
@@ -319,12 +303,14 @@ Retrieve
 Program
     [Arguments]    ${button_name}
     Button    ${button_name}    Program
+    ${Handle_Alert_Detail}    Run Keyword And Return Status    Handle Alert    action=ACCEPT    timeout=0.3s
+    Log To Console    ${Handle_Alert_Detail}
     Wait Until Progress Bar Reaches 100 V2
 Program Old
     [Arguments]    ${button_name}
     Button    ${button_name}    Program
     ${Handle_Alert_Detail}    Run Keyword And Return Status    Handle Alert    action=ACCEPT    timeout=0.3s
-    # Log To Console    ${Handle_Alert_Detail}
+    Log To Console    ${Handle_Alert_Detail}
     Wait Until Progress Bar Reaches 100
 
 Wait Until Progress Bar Reaches 100
@@ -472,66 +458,7 @@ Get Text If Element Exists
         Return From Keyword    ${default_value}
     END
 
-Assign input to command V2
-    [Arguments]    ${input}    ${command}
-    #xpath=//div[contains(text(), "${input}")]/ancestor::tr//following::input[contains(@type, 'checkbox')][${command}]
-    Scroll Element Into View Softly    xpath=//div[contains(text(), "Inp ${input}-")]/ancestor::tr/descendant::input[contains(@type, 'checkbox')][${command}]
-    # Wait Until Element Is Visible    xpath=//div[contains(text(), "Inp ${input}-")]/ancestor::tr//descendant::input[contains(@type, 'checkbox')][${command}]    timeout=5s
-    Select Checkbox    xpath=//div[contains(text(), "Inp ${input}-")]/ancestor-or-self::tr//following::input[contains(@type, 'checkbox')][${command}]
-    # Sleep    0.1s
 
-Unassign input to command V2
-    [Arguments]    ${input}    ${command}
-    Scroll Element Into View Softly    xpath=//div[contains(text(), "Inp ${input}-")]/ancestor::tr/descendant::input[contains(@type, 'checkbox')][${command}]
-    # Wait Until Element Is Visible    xpath=//div[contains(text(), "Inp ${input}-")]/ancestor::tr//descendant::input[contains(@type, 'checkbox')][${command}]    timeout=5s
-    Unselect Checkbox    xpath=//div[contains(text(), "Inp ${input}-")]/ancestor-or-self::tr//following::input[contains(@type, 'checkbox')][${command}]
-    # Sleep    0.1s
-
-Assign output to command V2
-    [Arguments]    ${output}    ${command}
-    Scroll Element Into View Softly    xpath=//div[contains(text(), "Out ${output}-")]/ancestor-or-self::tr//descendant::input[contains(@type, 'checkbox')][${command}]
-    # Wait Until Element Is Visible    xpath=//div[contains(text(), "Out ${output}-")]/ancestor-or-self::tr//descendant::input[contains(@type, 'checkbox')][${command}]   timeout=5s
-    Select Checkbox    xpath=//div[contains(text(), "Out ${output}-")]/ancestor-or-self::tr//following::input[contains(@type, 'checkbox')][${command}]
-    # Sleep    0.1s
-
-Unassign output to command V2
-    [Arguments]    ${output}    ${command}
-    Scroll Element Into View Softly    xpath=//div[contains(text(), "Out ${output}-")]/ancestor-or-self::tr/descendant::input[contains(@type, 'checkbox')][${command}]
-    # Wait Until Element Is Visible    xpath=//div[contains(text(), "Out ${output}-")]/ancestor-or-self::tr//descendant::input[contains(@type, 'checkbox')][${command}]    timeout=5s
-    Unselect Checkbox    xpath=//div[contains(text(), "Out ${output}-")]/ancestor-or-self::tr//following::input[contains(@type, 'checkbox')][${command}]
-    # Sleep    0.1s
-
-Validate Input Output In Range
-    [Arguments]    ${input_output}    ${num_input_output}
-    # Validate Input In Range    ${num_input}    ${min}    ${max}
-    ${min}    Set Variable    1
-    ${input_count}    ${output_count}=    Get Displayed Input Output Counts
-
-    IF    ${input_output} == "input"
-        ${max}    Set Variable    ${input_count}
-    ELSE IF    ${input_output} == "output"
-        ${max}    Set Variable    ${output_count}
-    ELSE
-        Log    input_output not recognized. Please select input or output.
-        ${max}    Set Variable    0
-    END
-
-    ${is_number_0}    Evaluate    "${num_input_output}".isdigit()
-    Run Keyword If    not ${is_number_0}    Fail    No es un mínimo válido
-    ${is_in_range}    Evaluate    (${min} <= ${num_input_output} <= ${max}) and (${is_number_0} == True)
-
-    Return From Keyword    ${is_in_range}
-
-Get Displayed Input Output Counts
-    [Documentation]    Counts the visible Input and Output configuration rows on the page.
-    # Count the Input labels (td starting with 'Inp ')
-    ${input_count}=    SeleniumLibrary.Get Element Count    xpath=//td[starts-with(normalize-space(.), 'Inp ')]
-    # Count the Output labels (td starting with 'Out ')
-    ${output_count}=   SeleniumLibrary.Get Element Count    xpath=//td[starts-with(normalize-space(.), 'Out ')]
-
-    # Log To Console    \nNumber of configurable Inputs displayed: ${input_count}
-    # Log To Console    Number of configurable Outputs displayed: ${output_count}\n
-    Return From Keyword    ${input_count}    ${output_count}
 
 Check If an Error Popup Appeared & Skip It
     ${Error_popup_button_xpath}=    Set Variable    xpath=//button[contains(@class, 'p-toast-icon-close p-link')]
@@ -662,6 +589,139 @@ Open INV_CMD Conditions Section Associated To Teleprotection
 # ******************************************************************************************************************************
 # ************************************************************************************************************************
 #IBTU_FFT MODULE CONFIG
+
+Retrieve IBTU_FFT Module
+    # 1a Seccion
+    ${LST_LOCAL_PERIODICITY_xpath}=    Set Variable    xpath=//input[@name='dtproTestMgmtAutomaticTestPeriodicityHours']
+    ${LST_REMOTE_PERIODICITY_xpath}=    Set Variable    xpath=//input[@name='dtproTestMgmtAutomaticTestRemote']
+    ${LST_SNR_THRESHOLD_ACTIVATION_xpath}=    Set Variable    xpath=//input[@name='dtproFftLowSnrThreshold']
+    ${LST_SNR_THRESHOLD_DEACTIVATION_xpath}=    Set Variable    xpath=//input[@name='dtproFftHighSnrThreshold']
+    
+    ${LST_TX_COMMAND_NUM_xpath}=    Set Variable    xpath=//input[@name='dtproCfgNumTransmitCommands']
+    ${LST_RX_COMMAND_NUM_xpath}=    Set Variable    xpath=//input[@name='dtproCfgNumReceiveCommands']
+
+
+    ${LST_LOCAL_PERIODICITY}    SeleniumLibrary.Get Element Attribute    ${LST_LOCAL_PERIODICITY_xpath}    value
+    ${LST_REMOTE_PERIODICITY}    SeleniumLibrary.Get Element Attribute    ${LST_REMOTE_PERIODICITY_xpath}    value
+
+    ${LST_SNR_THRESHOLD_ACTIVATION}    SeleniumLibrary.Get Element Attribute    ${LST_SNR_THRESHOLD_ACTIVATION_xpath}    value
+    ${LST_SNR_THRESHOLD_DEACTIVATION}    SeleniumLibrary.Get Element Attribute    ${LST_SNR_THRESHOLD_DEACTIVATION_xpath}    value
+
+    ${LST_TX_COMMAND_NUM}    SeleniumLibrary.Get Element Attribute    ${LST_TX_COMMAND_NUM_xpath}    value
+    ${LST_RX_COMMAND_NUM}    SeleniumLibrary.Get Element Attribute    ${LST_RX_COMMAND_NUM_xpath}    value
+
+    # Log    \${LST_LOCAL_PERIODICITY} = ${LST_LOCAL_PERIODICITY}
+    # Log    \${LST_REMOTE_PERIODICITY} = ${LST_REMOTE_PERIODICITY}
+    # Log    \${LST_SNR_THRESHOLD_ACTIVATION} = ${LST_SNR_THRESHOLD_ACTIVATION}
+    # Log    \${LST_SNR_THRESHOLD_DEACTIVATION} = ${LST_SNR_THRESHOLD_DEACTIVATION}
+    # Log    \${LST_TX_COMMAND_NUM} = ${LST_TX_COMMAND_NUM}
+    # Log    \${LST_RX_COMMAND_NUM} = ${LST_RX_COMMAND_NUM}
+    
+    @{LST_RX_OM_LIST}=    Create List
+    FOR    ${rx_command}    IN RANGE    1    ${LST_RX_COMMAND_NUM}
+        ${LST_CMD_OPERATION_MODE_xpath}=    Set Variable    xpath=//select[@var_name='dtproFftRxCmd${rx_command}Mode']
+        ${LST_CMD_OPERATION_MODE}    SeleniumLibrary.Get Element Attribute    ${LST_CMD_OPERATION_MODE_xpath}    value
+        # value=0: Normal, value=1: Telesignalling
+        Append To List    ${LST_RX_OM_LIST}    ${LST_CMD_OPERATION_MODE}
+    END
+    # Log    \${LST_RX_OM_LIST} = ${LST_RX_OM_LIST}
+
+    # 2a Seccion
+    # TX
+    ${LST_TX_GUARD_FREQ_xpath}=    Set Variable    xpath=//input[@name='dtproFftGrdTxFreq_USR']
+    ${LST_TX_BW_FREQ_xpath}=    Set Variable    xpath=//select[@var_name='dtproFftTproTxBw']
+
+    # Posibles frecuencias: 1100, 1150, 1200, 1250, 1300, 1350, 1400, 1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850, 1900, 1950, 2000, 2050, 2100, 2150, 2200, 2250, 2300, 2350, 2400, 2450, 2500, 2550, 2600, 2650, 2700, 2750, 2800, 2850, 2900, 2950, 3000, 3050, 3100, 3150, 3200, 3250, 3300, 3350, 3400, 3450, 3500, 3550, 3600, 3650, 3700, 3750, 3800
+    ${LST_TX_GUARD_FREQ}    SeleniumLibrary.Get Element Attribute    ${LST_TX_GUARD_FREQ_xpath}    value
+    # Posibles Bandwdth: 1kHz, 2kHz, 4kHz
+    ${LST_TX_BW_FREQ}    SeleniumLibrary.Get Element Attribute    ${LST_TX_BW_FREQ_xpath}    value
+    ${LST_TX_BW_FREQ_LIST}    Open TX Guard Frequencies and Show Them
+
+    # Log    \${LST_TX_GUARD_FREQ} = ${LST_TX_GUARD_FREQ}
+    # Log    \${LST_TX_BW_FREQ} = ${LST_TX_BW_FREQ}
+    # Log    \${LST_TX_BW_FREQ_LIST} = ${LST_TX_BW_FREQ_LIST}
+    
+    @{LST_TX_AM_LIST}=    Create List
+    FOR    ${tx_command}    IN RANGE    1    ${LST_TX_COMMAND_NUM}
+        ${LST_TX_CMD_APLICATION_MODE_xpath}=    Set Variable    xpath=//select[@var_name='dtproFftTxCmd${tx_command}Bw']
+        ${LST_TX_CMD_APLICATION_MODE}    SeleniumLibrary.Get Element Attribute    ${LST_TX_CMD_APLICATION_MODE_xpath}    value
+        # value=0: Blocking, value=1: Permissive, value=2: Direct
+        Append To List    ${LST_TX_AM_LIST}    ${LST_TX_CMD_APLICATION_MODE}
+        
+    END
+    # Log    \${LST_TX_AM_LIST} = ${LST_TX_AM_LIST}
+
+    # RX
+    ${RX_GUARD_FREQ_xpath}=    Set Variable    xpath=//input[@name='dtproFftGrdRxFreq_USR']
+    ${RX_BW_FREQ_xpath}=    Set Variable    xpath=//select[@var_name='dtproFftTproRxBw']
+    
+    # Posibles frecuencias: 1100, 1150, 1200, 1250, 1300, 1350, 1400, 1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850, 1900, 1950, 2000, 2050, 2100, 2150, 2200, 2250, 2300, 2350, 2400, 2450, 2500, 2550, 2600, 2650, 2700, 2750, 2800, 2850, 2900, 2950, 3000, 3050, 3100, 3150, 3200, 3250, 3300, 3350, 3400, 3450, 3500, 3550, 3600, 3650, 3700, 3750, 3800
+    ${RX_GUARD_FREQ}    SeleniumLibrary.Get Element Attribute    ${RX_GUARD_FREQ_xpath}    value
+    # Posibles Bandwdth: 1kHz, 2kHz, 4kHz
+    ${RX_BW_FREQ}    SeleniumLibrary.Get Element Attribute    ${RX_BW_FREQ_xpath}    value
+    ${LST_RX_BW_FREQ_LIST}    Open RX Guard Frequencies and Show Them
+
+    # Log    \${RX_GUARD_FREQ} = ${RX_GUARD_FREQ}
+    # Log    \${RX_BW_FREQ} = ${RX_BW_FREQ}
+    # Log    \${LST_RX_BW_FREQ_LIST} = ${LST_RX_BW_FREQ_LIST}
+
+
+    @{LST_RX_AM_LIST}=    Create List
+    FOR    ${rx_command}    IN RANGE    1    ${LST_RX_COMMAND_NUM}
+        ${LST_RX_CMD_APLICATION_MODE_xpath}=    Set Variable    xpath=//select[@var_name='dtproFftRxCmd${rx_command}Bw']
+        ${LST_RX_CMD_APLICATION_MODE}    SeleniumLibrary.Get Element Attribute    ${LST_RX_CMD_APLICATION_MODE_xpath}    value
+        # value=0: Blocking, value=1: Permissive, value=2: Direct
+        Append To List    ${LST_RX_AM_LIST}    ${LST_RX_CMD_APLICATION_MODE}
+    END
+
+    # Log    \${LST_RX_AM_LIST} = ${LST_RX_AM_LIST}
+
+    # 3a Seccion
+    ${LST_INPUT_LEVEL_xpath}=    Set Variable    xpath=//input[@name='dclientTproInputGainFloatView']
+    ${LST_OUTPUT_LEVEL_xpath}=    Set Variable    xpath=//input[@name='dclientTproOutputGainFloatView']
+    ${LST_POWER_BOOSTING_xpath}=    Set Variable    xpath=//input[@name='dtproPowerIncrement']
+    
+    # (INPUT_LEVEL: 0 to -40 dBm)
+    ${LST_INPUT_LEVEL}    SeleniumLibrary.Get Element Attribute    ${LST_INPUT_LEVEL_xpath}    value
+    # (OUTPUT_LEVEL: 0 to -30 dBm)
+    ${LST_OUTPUT_LEVEL}    SeleniumLibrary.Get Element Attribute    ${LST_OUTPUT_LEVEL_xpath}    value
+    # (POWER_BOOSTING: 0 to 6 dB)
+    ${LST_POWER_BOOSTING}    SeleniumLibrary.Get Element Attribute    ${LST_POWER_BOOSTING_xpath}    value
+
+
+    # Log    \${LST_INPUT_LEVEL} = ${LST_INPUT_LEVEL}
+    # Log    \${LST_OUTPUT_LEVEL} = ${LST_OUTPUT_LEVEL}
+    # Log    \${LST_POWER_BOOSTING} = ${LST_POWER_BOOSTING}
+
+    &{fft_config_data}=    Create Dictionary
+        ...    local_periodicity=${LST_LOCAL_PERIODICITY}
+        ...    remote_periodicity=${LST_REMOTE_PERIODICITY}
+        ...    snr_activation=${LST_SNR_THRESHOLD_ACTIVATION}
+        ...    snr_deactivation=${LST_SNR_THRESHOLD_DEACTIVATION}
+        ...    tx_commands=${LST_TX_COMMAND_NUM}
+        ...    rx_commands=${LST_RX_COMMAND_NUM}
+        ...    rx_op_mode_list=${LST_RX_OM_LIST}
+        ...    tx_guard_freq=${LST_TX_GUARD_FREQ}
+        ...    tx_bw=${LST_TX_BW_FREQ}
+        ...    # tx_bw_freq_list=${LST_TX_BW_FREQ_LIST} # Quizás no necesitas pasar esta lista
+        ...    tx_app_mode_list=${LST_TX_AM_LIST}
+        ...    rx_guard_freq=${RX_GUARD_FREQ}
+        ...    rx_bw=${RX_BW_FREQ}
+        ...    # rx_bw_freq_list=${LST_RX_BW_FREQ_LIST} # Quizás no necesitas pasar esta lista
+        ...    rx_app_mode_list=${LST_RX_AM_LIST}
+        ...    input_level=${LST_INPUT_LEVEL}
+        ...    output_level=${LST_OUTPUT_LEVEL}
+        ...    power_boosting=${LST_POWER_BOOSTING}
+
+        # 2. Convertir el diccionario a JSON (Necesitas 'Library    JSONLibrary' en *** Settings ***)
+    ${json_data}=    Evaluate    json.dumps(${fft_config_data})    modules=json
+
+        # 3. Enviar los datos a la consola para que el listener de Python los capture
+    Log To Console    GUI_DATA::${json_data}
+
+
+# ************************************************************************************
+# ************************************************************************************
 #1st Section
 LOCAL Automatic Link Test Periodicity Assign
     [Arguments]    ${link_test_periodicity_hours}
@@ -738,6 +798,7 @@ Deactivation Threshold Assign for low Snr Ratio Alarm
     ELSE
         Fail    Threshold is not a valid number. Value should be btw 3 - 20dB.
     END
+
 Assign Reception Operation Mode
     [Documentation]    Assign to the Command Number passed as an argument the Reception Operation Mode Selected. ${Reception_Operation_Mode} = 0 : Normal. ${Reception_Operation_Mode} = 1 : Telesignalling
     [Arguments]    ${Command}    ${Reception_Operation_Mode}
@@ -760,11 +821,49 @@ Autoconfig Reception Operation Mode
             Assign Reception Operation Mode    ${cmd_num}    ${Reception_Operation_Mode}
         END
     END
+Process Reception Operation Mode
+    [Arguments]    ${rx_operation_mode_list_str}
+    ${rx_operation_mode_list}=    Evaluate    ${rx_operation_mode_list_str}
+
+    ${OM_list_length}    Get Length    ${rx_operation_mode_list}
+    ${OM_list_length}=    Set Variable    ${OM_list_length} + 1
+    
+    FOR    ${cmd_num}    IN RANGE    1    ${OM_list_length}
+        ${list_index}=    Evaluate    ${cmd_num} - 1
+        ${OM_state}=    Get From List    ${rx_operation_mode_list}    ${list_index}
+        Assign Reception Operation Mode    ${cmd_num}    ${OM_state}
+    END
 
 
 #*************************************************************************************************************************************************************
 
 #2nd Section
+Process TX Application Mode
+    [Arguments]    ${tx_application_mode_list_str}
+    ${tx_operation_mode_list}=    Evaluate    ${rx_operation_mode_list_str}
+
+    ${AM_list_length}    Get Length    ${tx_operation_mode_list}
+    ${AM_list_length}=    Set Variable    ${AM_list_length} + 1
+    
+    FOR    ${cmd_num}    IN RANGE    1    ${AM_list_length}
+        ${list_index}=    Evaluate    ${cmd_num} - 1
+        ${AM_state}=    Get From List    ${tx_operation_mode_list}    ${list_index}
+        Assign TX Application Type To Channel    ${cmd_num}    ${AM_state}
+    END
+
+Process RX Application Mode
+    [Arguments]    ${rx_application_mode_list_str}
+    ${rx_operation_mode_list}=    Evaluate    ${rx_operation_mode_list_str}
+
+    ${AM_list_length}    Get Length    ${rx_operation_mode_list}
+    ${AM_list_length}=    Set Variable    ${AM_list_length} + 1
+    
+    FOR    ${cmd_num}    IN RANGE    1    ${AM_list_length}
+        ${list_index}=    Evaluate    ${cmd_num} - 1
+        ${AM_state}=    Get From List    ${rx_operation_mode_list}    ${list_index}
+        Assign RX Application Type To Channel    ${cmd_num}    ${AM_state}
+    END
+
 Assign TX Application Type To Channel
     [Documentation]    Assign for the Tone & Command Activated associated passed as an argument the Application Type Selected. ${Application_Operation_Mode} = 0 : Blocking. ${Application_Operation_Mode} = 1 : Permissive. ${Application_Operation_Mode} = 2 : Direct. 
     [Arguments]    ${Channel}    ${Application_Operation_Mode}

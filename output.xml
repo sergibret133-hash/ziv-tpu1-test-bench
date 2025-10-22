@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot generator="Robot 7.2.2 (Python 3.9.12 on win32)" generated="2025-10-21T14:41:58.919407" rpa="false" schemaversion="5">
+<suite id="s1" name="Module IBTU FFT" source="c:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\tests\Module_IBTU_FFT.robot">
+<kw name="Conectar A Navegador Existente" owner="BrowserManager" type="SETUP">
+<kw name="Close All Browsers" owner="SeleniumLibrary">
+<doc>Closes all open browsers and resets the browser cache.</doc>
+<status status="PASS" start="2025-10-21T14:42:00.107557" elapsed="0.001000"/>
+</kw>
+<msg time="2025-10-21T14:42:00.109551" level="FAIL">Suite Setup falló: [Errno 2] No such file or directory: 'C:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\session.json'</msg>
+<doc>Conecta a una sesión de navegador existente (sin crear nuevas ventanas).</doc>
+<status status="FAIL" start="2025-10-21T14:42:00.106562" elapsed="0.049780">Suite Setup falló: [Errno 2] No such file or directory: 'C:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\session.json'</status>
+</kw>
+<test id="s1-t1" name="Assign Reception Operation Mode" line="119">
+<tag>robot:exit</tag>
+<status status="FAIL" start="2025-10-21T14:42:00.157539" elapsed="0.002000">Test execution stopped due to a fatal error.</status>
+</test>
+<doc>This is a basic test</doc>
+<status status="FAIL" start="2025-10-21T14:41:58.935991" elapsed="1.230437">Suite setup failed:
+Suite Setup falló: [Errno 2] No such file or directory: 'C:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\session.json'</status>
+</suite>
+<statistics>
+<total>
+<stat pass="0" fail="1" skip="0">All Tests</stat>
+</total>
+<tag>
+<stat info="combined" combined="NOT robot:exit" pass="0" fail="0" skip="0">NOT robot:exit</stat>
+</tag>
+<suite>
+<stat name="Module IBTU FFT" id="s1" pass="0" fail="1" skip="0">Module IBTU FFT</stat>
+</suite>
+</statistics>
+<errors>
+</errors>
+</robot>
