@@ -128,7 +128,9 @@ def _populate_module_config_tab(app_ref, tab_frame):
         sub_tab.grid_rowconfigure(0, weight=1)
 
         if module_name == "IBTU_ByTones":
-            _populate_ibtu_bytones_tab(app_ref,sub_tab)
+            _populate_ibtu_bytones_tab(app_ref, sub_tab)
+        elif module_name == "IBTU_FFT":
+            _populate_ibtu_fft_tab(app_ref, sub_tab)
         else:
             placeholder_frame = ctk.CTkFrame(sub_tab, fg_color="transparent")
             placeholder_frame.grid(row=0, column=0, sticky="nsew")
@@ -568,3 +570,282 @@ def _update_ibtu_full_config_display(app_ref, listener):
 
     if listener.ibtu_rx_guard_freq:
         app_ref.ibtu_rx_tone_widgets['guard_combo'].set(listener.ibtu_rx_guard_freq)
+
+
+
+
+# **************************** IBTU_FFT  *************************************
+def _populate_ibtu_fft_tab(app_ref, tab_frame):
+    """Populates the IBTU FFT configuration tab."""
+
+    # Configurar grid para el tab_frame
+    tab_frame.grid_columnconfigure(0, weight=1) # Columna 0 ocupa todo el ancho
+    tab_frame.grid_rowconfigure(0, weight=1)    # Fila 0 (scroll_frame) ocupa casi todo el alto
+
+    # *** Frame principal con scroll ***
+    scroll_frame = ctk.CTkScrollableFrame(tab_frame, label_text="Configuración IBTU FFT")
+    scroll_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+    scroll_frame.grid_columnconfigure(0, weight=1) # Para que el contenido dentro use el ancho
+
+    # *** Creamos Sub-Frames para cada sección ***
+
+    # Sección General
+    general_frame = ctk.CTkFrame(scroll_frame)
+    general_frame.pack(fill="x", padx=10, pady=10)
+    general_frame.grid_columnconfigure(1, weight=1) # Columna de widgets ocupa espacio
+
+    ctk.CTkLabel(general_frame, text="General Settings", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, pady=(5, 10), sticky="w")
+
+    # Periodicidades y Umbrales SNR (Ejemplos Estáticos)
+    ctk.CTkLabel(general_frame, text="Local Periodicity (h):").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    app_ref.fft_local_periodicity_entry = ctk.CTkEntry(general_frame, placeholder_text="0-24")
+    app_ref.fft_local_periodicity_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+
+    ctk.CTkLabel(general_frame, text="Remote Periodicity (h):").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+    app_ref.fft_remote_periodicity_entry = ctk.CTkEntry(general_frame, placeholder_text="0-24")
+    app_ref.fft_remote_periodicity_entry.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+
+    ctk.CTkLabel(general_frame, text="SNR Activation Thresh. (dB):").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+    app_ref.fft_snr_activation_entry = ctk.CTkEntry(general_frame, placeholder_text="0-17")
+    app_ref.fft_snr_activation_entry.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+
+    ctk.CTkLabel(general_frame, text="SNR Deactivation Thresh. (dB):").grid(row=4, column=0, padx=10, pady=5, sticky="w")
+    app_ref.fft_snr_deactivation_entry = ctk.CTkEntry(general_frame, placeholder_text="3-20")
+    app_ref.fft_snr_deactivation_entry.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
+    
+    # ********************** OPERATION MODE ****************
+    # Frame para Modos de Operación RX (Dinámico)
+    app_ref.fft_rx_op_mode_frame = ctk.CTkFrame(general_frame, fg_color="transparent")
+    app_ref.fft_rx_op_mode_frame.grid(row=5, column=0, columnspan=2, pady=(10, 5), sticky="ew")
+    app_ref.fft_rx_op_mode_frame.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(app_ref.fft_rx_op_mode_frame, text="Reception Operation Mode:").pack(anchor="w", padx=10)
+
+    # Añadimos los Comboboxes y labels dinamicamente 
+    app_ref.fft_rx_op_mode_combos.clear() # Limpiar lista por si se repopula. fft_rx_op_mode_combos será a traves de lo que accederemos para cambiar el contenido dinamicamente desde app.py
+    MAX_COMMANDS = 8 # Asumir un máximo por ahora
+    for i in range(MAX_COMMANDS):
+        # Frame de la fila donde colocaremos el label el combo de cada comando que iteramos con el FOR 
+        row_frame = ctk.CTkFrame(app_ref.fft_rx_op_mode_frame, fg_color="transparent")
+        # Empaquetamos en lugar de usar grid aquí para que aparezcan uno debajo del otro
+        row_frame.pack(fill="x", padx=10, pady=2)
+        row_frame.grid_columnconfigure(1, weight=1)
+
+        label = ctk.CTkLabel(row_frame, text=f"  Command {i+1}:", width=100)
+        label.grid(row=0, column=0, sticky="w")
+        combo = ctk.CTkComboBox(row_frame, values=list(app_ref.fft_rx_op_mode_map.keys())) # Los valores disponibles para seleccionar para operation mode los cogemos de la inicialización del mapeo de estas variables.
+        combo.grid(row=0, column=1, sticky="ew")
+        app_ref.fft_rx_op_mode_combos.append({"frame": row_frame, "label": label, "combo": combo}) #fft_rx_op_mode_combos será a traves de lo que accederemos para cambiar el contenido dinamicamente desde app.py
+        row_frame.pack_forget() # Ocultar inicialmente
+    
+    
+    
+    # ****************** Sección Frequencies -> COLUMNAS TX Y RX ************
+    frequencies_frame = ctk.CTkFrame(scroll_frame)
+    frequencies_frame.pack(fill="x", padx=10, pady=10)
+    frequencies_frame.grid_columnconfigure((0, 2), weight=1) # Columnas TX y RX (por eso ponemos (0,¡2!)
+    frequencies_frame.grid_columnconfigure(1, weight=0)      # Columna botones Copy
+
+    ctk.CTkLabel(frequencies_frame, text="Frequencies & Application Modes", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=3, pady=(5, 10), sticky="w")
+
+
+        # ********************** TX ****************
+        # Sub-frame TX
+    tx_freq_frame = ctk.CTkFrame(frequencies_frame)
+    tx_freq_frame.grid(row=1, column=0, padx=(0, 5), pady=5, sticky="nsew")
+    tx_freq_frame.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(tx_freq_frame, text="Transmission (TX)", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, pady=(0, 5), sticky="w")
+    
+        # WIDGETS TX
+
+    ctk.CTkLabel(tx_freq_frame, text="Bandwidth:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+    app_ref.fft_tx_bw_combo = ctk.CTkComboBox(tx_freq_frame, values=list(app_ref.fft_bw_map.keys()))    # 1kHz, 2kHz,4kHz. # Los valores disponibles para seleccionar los cogemos de la inicialización del mapeo de estas variables.
+    app_ref.fft_tx_bw_combo.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+
+    ctk.CTkLabel(tx_freq_frame, text="Guard Freq (Hz):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+    app_ref.fft_tx_guard_freq_entry = ctk.CTkEntry(tx_freq_frame, placeholder_text="e.g., 1100")
+    app_ref.fft_tx_guard_freq_entry.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+    # TODO: Añadir botón para seleccionar frecuencia
+
+    app_ref.fft_tx_app_mode_frame = ctk.CTkFrame(tx_freq_frame, fg_color="transparent")
+    app_ref.fft_tx_app_mode_frame.grid(row=3, column=0, columnspan=2, pady=(10, 5), sticky="ew")
+    ctk.CTkLabel(app_ref.fft_tx_app_mode_frame, text="Application Mode:").pack(anchor="w", padx=5)
+
+        # *** Añadimos Comboboxes y Labels Dinámicos TX para el Modo de Aplicación ***
+    app_ref.fft_tx_app_mode_combos.clear()
+    for i in range(MAX_COMMANDS):
+        row_frame = ctk.CTkFrame(app_ref.fft_tx_app_mode_frame, fg_color="transparent")
+        row_frame.pack(fill="x", padx=5, pady=2)
+        row_frame.grid_columnconfigure(1, weight=1)
+        
+        label = ctk.CTkLabel(row_frame, text=f"  Command {i+1}:", width=100)
+        label.grid(row=0, column=0, sticky="w")
+        combo = ctk.CTkComboBox(row_frame, values=list(app_ref.fft_app_mode_map.keys()))    # Los valores disponibles para seleccionar para application mode los cogemos de la inicialización del mapeo de estas variables.
+        combo.grid(row=0, column=1, sticky="ew")
+        
+        app_ref.fft_tx_app_mode_combos.append({"frame": row_frame, "label": label, "combo": combo}) #fft_tx_app_mode_combos será a traves de lo que accederemos para cambiar el contenido dinamicamente desde app.py
+        row_frame.pack_forget() # Ocultar inicialmente
+
+    # **********************************************************************************************
+
+    # Botones Copy
+    copy_buttons_frame = ctk.CTkFrame(frequencies_frame, fg_color="transparent")
+    copy_buttons_frame.grid(row=1, column=1, padx=5, pady=5, sticky="ns")   # column=1 para que esté en medio
+    # TODO: Añadir comandos a los botones Copy
+    copy_rx_to_tx_button = ctk.CTkButton(copy_buttons_frame, text="RX -> TX", width=60) # command=...
+    copy_rx_to_tx_button.pack(pady=10)
+    copy_tx_to_rx_button = ctk.CTkButton(copy_buttons_frame, text="TX -> RX", width=60) # command=...
+    copy_tx_to_rx_button.pack(pady=10)
+
+    # **********************************************************************************************
+
+        # ********************** RX ****************
+        # Sub-frame RX
+    rx_freq_frame = ctk.CTkFrame(frequencies_frame)
+    rx_freq_frame.grid(row=1, column=2, padx=(5, 0), pady=5, sticky="nsew")
+    rx_freq_frame.grid_columnconfigure(1, weight=1)
+    ctk.CTkLabel(rx_freq_frame, text="Reception (RX)", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, pady=(0, 5), sticky="w")
+
+        # Widgets RX
+    ctk.CTkLabel(rx_freq_frame, text="Bandwidth:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+    app_ref.fft_rx_bw_combo = ctk.CTkComboBox(rx_freq_frame, values=list(app_ref.fft_bw_map.keys()))# Los valores disponibles para seleccionar el BW los cogemos de la inicialización del mapeo de esta variable.
+    app_ref.fft_rx_bw_combo.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+
+    ctk.CTkLabel(rx_freq_frame, text="Guard Freq (Hz):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+    app_ref.fft_rx_guard_freq_entry = ctk.CTkEntry(rx_freq_frame, placeholder_text="e.g., 1100")
+    app_ref.fft_rx_guard_freq_entry.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+    # TODO: Añadir botón para seleccionar frecuencia
+
+    app_ref.fft_rx_app_mode_frame = ctk.CTkFrame(rx_freq_frame, fg_color="transparent")
+    app_ref.fft_rx_app_mode_frame.grid(row=3, column=0, columnspan=2, pady=(10, 5), sticky="ew")
+    ctk.CTkLabel(app_ref.fft_rx_app_mode_frame, text="Application Mode:").pack(anchor="w", padx=5)
+
+        # *** Añadimos Comboboxes y Labels Dinámicos RX para el Modo de Aplicación ***
+    app_ref.fft_rx_app_mode_combos.clear()
+    for i in range(MAX_COMMANDS):
+        row_frame = ctk.CTkFrame(app_ref.fft_rx_app_mode_frame, fg_color="transparent")
+        row_frame.pack(fill="x", padx=5, pady=2)
+        row_frame.grid_columnconfigure(1, weight=1)
+        
+        label = ctk.CTkLabel(row_frame, text=f"  Command {i+1}:", width=100)
+        label.grid(row=0, column=0, sticky="w")
+        combo = ctk.CTkComboBox(row_frame, values=list(app_ref.fft_app_mode_map.keys()))      # Los valores disponibles para seleccionar para application mode los cogemos de la inicialización del mapeo de estas variables.      
+        combo.grid(row=0, column=1, sticky="ew")
+        
+        app_ref.fft_rx_app_mode_combos.append({"frame": row_frame, "label": label, "combo": combo})    #fft_rx_app_mode_combos será a traves de lo que accederemos para cambiar el contenido dinamicamente desde app.py        
+        row_frame.pack_forget() # Ocultar inicialmente
+        
+        
+        
+    # --- Sección Levels ---
+    levels_frame = ctk.CTkFrame(scroll_frame)
+    levels_frame.pack(fill="x", padx=10, pady=10)
+    levels_frame.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(levels_frame, text="Levels", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, pady=(5, 10), sticky="w")
+
+    # Input Level, Power Boosting, Output Level (Ejemplos Estáticos)
+    ctk.CTkLabel(levels_frame, text="Input Level (dBm):").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+    app_ref.fft_input_level_entry = ctk.CTkEntry(levels_frame, placeholder_text="-40 a 0")
+    app_ref.fft_input_level_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+
+    ctk.CTkLabel(levels_frame, text="Power Boosting (dB):").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+    app_ref.fft_power_boosting_entry = ctk.CTkEntry(levels_frame, placeholder_text="0 a 6")
+    app_ref.fft_power_boosting_entry.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
+
+    ctk.CTkLabel(levels_frame, text="Output Level (dBm):").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+    app_ref.fft_output_level_entry = ctk.CTkEntry(levels_frame, placeholder_text="-30 a 0")
+    app_ref.fft_output_level_entry.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+
+
+    # --- 3. Frame para botones (al final, fuera del scroll) ---
+    buttons_frame = ctk.CTkFrame(tab_frame)
+    buttons_frame.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
+    buttons_frame.grid_columnconfigure((0, 1), weight=1)
+
+    app_ref.query_ibtu_fft_button = ctk.CTkButton(buttons_frame, text="Consultar Configuración IBTU FFT", command=app_ref.equipment_controller._run_retrieve_ibtu_fft_config_thread)
+    app_ref.query_ibtu_fft_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+
+    app_ref.program_ibtu_fft_button = ctk.CTkButton(buttons_frame, text="Programar Configuración IBTU FFT", command=app_ref.equipment_controller._run_program_ibtu_fft_thread) 
+    app_ref.program_ibtu_fft_button.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+    app_ref.query_ibtu_fft_button.configure(state="disabled")
+    app_ref.program_ibtu_fft_button.configure(state="disabled")
+
+
+def _update_ibtu_fft_config_display(app_ref, fft_config_data):  # fft_config_data espera un diccionairio .json
+    """Updates the IBTU FFT configuration tab with data from the listener dictionary."""
+
+    # --- Funciones auxiliares (helper) ---
+    def set_entry(entry_widget, value): # Antes de actualizar los widgets, comprueba que existan y que el valor pasado no sea None
+        if entry_widget and value is not None:
+            entry_widget.delete(0, "end")
+            entry_widget.insert(0, str(value))
+
+    def set_combobox(combo_widget, value_map_rev, value):   # Recordemos que a traves del mapeo de variables ..._rev podiamos convertir los numeros que nos pasa el listener a texto para ser leido desde la GUI.
+        if combo_widget and value is not None:
+            # Busca el texto correspondiente al valor numérico en el diccionario de variables _rev
+            display_text = value_map_rev.get(str(value))
+            if display_text:
+                combo_widget.set(display_text)  # Si ha sido posible obtener texto del mapeo a traves del diccionario de variables _rev, actualizamos el widget.
+            else:
+                # Si no se encuentra, muestra el valor crudo (o un placeholder)
+                combo_widget.set(str(value)) # O podrías poner combo_widget.set("")
+
+    # *** Actualizar Sección General *** Pasamos el widget en el que queremos escribir y los datos que nos pasan por argumento "fft_config_data" -> Recordemos que es un diccionario, y lo que nos interesa el valor de cada una de las claves que pasamos a traves del .get 
+    set_entry(app_ref.fft_local_periodicity_entry, fft_config_data.get('local_periodicity'))    # Para poder actualizar las entradas, usamos set_entry. 1er param: le pasamos la entrada existente en la GUI que queremos actualizar con el 2o param, que es un diccionario con todos los datos.
+    set_entry(app_ref.fft_remote_periodicity_entry, fft_config_data.get('remote_periodicity'))
+    set_entry(app_ref.fft_snr_activation_entry, fft_config_data.get('snr_activation'))
+    set_entry(app_ref.fft_snr_deactivation_entry, fft_config_data.get('snr_deactivation'))
+
+    # Actualizar Modos Operación RX (Dinámico)
+    rx_op_mode_list = fft_config_data.get('rx_op_mode_list', [])    # Esto es lo que nos llega del listener. Nos quedamos con la lista de config de los modos de operacion
+    num_rx_commands = len(rx_op_mode_list)
+    for i, widget_dict in enumerate(app_ref.fft_rx_op_mode_combos): # CUIDADO! Aqui recorremos los combos y frames QUE YA HAY DISPUESTOS EN LA GUI (Y QUE QUEREMOS ACTUALIZAR CON LOS QUE NOS HAN PASADO Y TENEMOS GUARDADOS EN rx_op_mode_list
+        frame = widget_dict['frame']     
+        combo = widget_dict['combo']
+        if i < num_rx_commands:
+            set_combobox(combo, app_ref.fft_rx_op_mode_map_rev, rx_op_mode_list[i]) # 1er param: el combo que queremos actualizar y que estamos recorriendo. 2o param:la función set_combobox necesita del diccionario de mapeo para actualizar los combobox. 3er param: El valor que estemos iterando de la lista de valores que nos ha llegado del listener.
+            # El frame para este comando debe ser visible
+            frame.pack(fill="x", padx=10, pady=2) 
+        else:
+            # Ocultamos los frames de comandos que no existen
+            frame.pack_forget()
+
+    # *** Actualizar Sección Frequencies ***
+    # TX
+    set_combobox(app_ref.fft_tx_bw_combo, app_ref.fft_bw_map_rev, fft_config_data.get('tx_bw'))
+    set_entry(app_ref.fft_tx_guard_freq_entry, fft_config_data.get('tx_guard_freq'))
+
+        # Modos de aplicación para TX
+    tx_app_mode_list = fft_config_data.get('tx_app_mode_list', [])
+    num_tx_commands = len(tx_app_mode_list) # Usar longitud real de datos TX
+    for i, widget_dict in enumerate(app_ref.fft_tx_app_mode_combos):
+        frame = widget_dict['frame']
+        combo = widget_dict['combo']
+        if i < num_tx_commands:
+            set_combobox(combo, app_ref.fft_app_mode_map_rev, tx_app_mode_list[i])
+            frame.pack(fill="x", padx=5, pady=2) 
+        else:
+            frame.pack_forget()
+
+    # RX
+    set_combobox(app_ref.fft_rx_bw_combo, app_ref.fft_bw_map_rev, fft_config_data.get('rx_bw'))
+    set_entry(app_ref.fft_rx_guard_freq_entry, fft_config_data.get('rx_guard_freq'))
+
+    rx_app_mode_list = fft_config_data.get('rx_app_mode_list', [])
+    
+        # Modos de aplicación para TX
+    # Reutilizamos num_rx_commands calculado antes
+    for i, widget_dict in enumerate(app_ref.fft_rx_app_mode_combos):
+        frame = widget_dict['frame']
+        combo = widget_dict['combo']
+        if i < num_rx_commands: # Basado en el número de comandos RX
+            set_combobox(combo, app_ref.fft_app_mode_map_rev, rx_app_mode_list[i])
+            frame.pack(fill="x", padx=5, pady=2) 
+        else:
+            frame.pack_forget()
+
+    # --- 3. Actualizar Sección Levels ---
+    set_entry(app_ref.fft_input_level_entry, fft_config_data.get('input_level'))
+    set_entry(app_ref.fft_power_boosting_entry, fft_config_data.get('power_boosting'))
+    set_entry(app_ref.fft_output_level_entry, fft_config_data.get('output_level'))

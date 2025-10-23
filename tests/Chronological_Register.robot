@@ -9,6 +9,7 @@ Library    XML
 Library    DateTime
 Library    Screenshot
 Library    BrowserManager.py
+Library    JSONLibrary
 
 Resource    Keep_Alive.robot
 
@@ -89,14 +90,18 @@ Retrieve Chronological Register
     Retrieve Chronological Register
     ${log_entries}=    Capture Chronological Log Entries    event_filter=${EVENT_ALARM_FILTER}    max_entries=${EXPECTED_NUM_ENTRIES}    ascending_order=${CHRONO_ORDER}
     
-    Log    GUI_DATA::${log_entries}    level=WARN
+    Log    GUI_DATA::${log_entries}    level=DEBUG
 
 Capture Last Chronological Log Entries
     Setup Folder Section
     Retrieve Chronological Register
     ${log_entries}=    Capture Chronological Log Entries    event_filter=${EVENT_ALARM_FILTER}    max_entries=${EXPECTED_NUM_ENTRIES}    ascending_order=${CHRONO_ORDER}
     
-    Log    GUI_DATA::${log_entries}    level=WARN
+    # Convertimos la lista de diccionarios a un string JSON
+    ${json_data}=    Evaluate    json.dumps(${log_entries})    modules=json
+    Log    GUI_DATA::${json_data}    level=INFO
+    # Log To Console    GUI_DATA::${json_data}    level=DEBUG
+    
 
 # Analyze Activation Times
 # #Time passed between two orders received from another TPU using two differents teleprotecion modules. 

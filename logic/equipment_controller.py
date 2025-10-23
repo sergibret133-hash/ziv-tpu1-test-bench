@@ -246,6 +246,8 @@ class EquipmentController:
             self.app_ref.gui_queue.put(('enable_buttons', None))
 
 # ************ MODULE CONFIGURATION ************
+
+    # **** IBTU ByTones ****
     def _run_retrieve_ibtu_config_thread(self):
         self.app_ref.run_button_state(is_running=True)
         threading.Thread(target=self._execute_retrieve_ibtu_config, daemon=True).start()
@@ -460,3 +462,127 @@ class EquipmentController:
         finally:
             self.app_ref.is_main_task_running = False
             self.app_ref.gui_queue.put(('enable_buttons', None))
+            
+    # **** IBTU FFT ****
+    def _run_retrieve_ibtu_fft_config_thread(self):
+        """Inicia un hilo para consultar la configuración completa de IBTU FFT."""
+        self.app_ref.run_button_state(is_running=True)
+        threading.Thread(target=self._execute_retrieve_ibtu_fft_config, daemon=True).start()
+
+    def _execute_retrieve_ibtu_fft_config(self):
+        """Ejecuta el test Robot para consultar la configuración de IBTU FFT."""
+        test_name = "Retrieve IBTU FFT Full Configuration"
+
+        # Crear el callback para actualizar la GUI en caso de éxito
+        gui_update_info = self.app_ref.test_gui_update_map.get(test_name)   # Nos da los atributos necesarios pasandole como argumento el test mediante mapeo de la variable test_gui_update_map
+        success_callback = None
+        if gui_update_info:
+            message_type, attr_names = gui_update_info  # Los atributos que necesitamos: 'update_ibtu_fft_config', ['ibtu_fft_data']
+            # Suponiendo que modificas el listener para tener 'ibtu_fft_data'
+            success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)   # Preparamos la funcion callback para ser modificada una vez ejecutado el test, PERO NO LA EJECUTAMOS AUN!
+
+        robot_executor._run_robot_test(
+            self.app_ref,
+            test_name=test_name,
+            preferred_filename="Module_IBTU_FFT.robot",
+            on_success=success_callback,    # la funcion _run_robot_test EJECUTARÁ la funcion callback en caso de que el test finalice correctamente, enviando los datos de forma segura hacia la GUI mediante la cola
+            on_pass_message="Configuración IBTU FFT consultada.",
+            on_fail_message="Fallo al consultar configuración IBTU FFT."
+        )
+        
+    def _run_program_ibtu_fft_thread(self):
+            """Inicia un hilo para programar TODA la configuración de IBTU FFT."""
+            # Nota: Podrías hacer funciones separadas para S1, S2, S3 si prefieres
+            self.app_ref.run_button_state(is_running=True)
+            threading.Thread(target=self._execute_program_ibtu_fft_full, daemon=True).start()
+
+    def _execute_program_ibtu_fft_full(self):
+        """Recopila datos de la GUI y ejecuta los tests Robot para programar IBTU FFT."""
+
+        # --- Recopilar datos de la GUI ---
+        try:
+            # Sección 1
+            # Recogemos cada uno de los datos que el usuario quiera programar una vez le de a program. Para posteriormente crear un diccioanrio Json y pasarselo al archivo .robot
+            local_p = self.app_ref.fft_local_periodicity_entry.get()
+            remote_p = self.app_ref.fft_remote_periodicity_entry.get()
+            snr_act = self.app_ref.fft_snr_activation_entry.get()
+            snr_deact = self.app_ref.fft_snr_deactivation_entry.get()
+            rx_op_modes = [self.app_ref.fft_rx_op_mode_map.get(combo['combo'].get())    # Recogemos los valores de los comboboxes, que son strings tipo "Normal". "Permissive".. ->
+                            for combo in self.app_ref.fft_rx_op_mode_combos if combo['frame'].winfo_ismapped()] # Solo visibles. -> Convertimos esos textos en variables que el archivo .robot pueda reconocer
+            rx_op_mode_list_str = json.dumps(rx_op_modes) # Convertir lista a string JSON
+
+            # Sección 2
+            tx_bw = self.app_ref.fft_bw_map.get(self.app_ref.fft_tx_bw_combo.get()) # La frecuencia que pasaremos sera la que el usuario escoja mediante el combo fft_tx_bw_combo. 
+            # Pero para que el archivo .robot lo entienda hay que pasarlo a formato numerico mapeando mediante fft_bw_map
+            tx_guard = self.app_ref.fft_tx_guard_freq_entry.get()
+            tx_app_modes = [self.app_ref.fft_app_mode_map.get(combo['combo'].get())
+                            for combo in self.app_ref.fft_tx_app_mode_combos if combo['frame'].winfo_ismapped()]
+            tx_app_mode_list_str = json.dumps(tx_app_modes)
+
+            rx_bw = self.app_ref.fft_bw_map.get(self.app_ref.fft_rx_bw_combo.get())
+            rx_guard = self.app_ref.fft_rx_guard_freq_entry.get()
+            rx_app_modes = [self.app_ref.fft_app_mode_map.get(combo['combo'].get())
+                            for combo in self.app_ref.fft_rx_app_mode_combos if combo['frame'].winfo_ismapped()]
+            rx_app_mode_list_str = json.dumps(rx_app_modes)
+
+            # Sección 3
+            input_l = self.app_ref.fft_input_level_entry.get()
+            power_b = self.app_ref.fft_power_boosting_entry.get()
+            output_l = self.app_ref.fft_output_level_entry.get()
+
+            # Validaciones básicas (puedes añadir más si quieres)
+            if not all([local_p, remote_p, snr_act, snr_deact, tx_bw, tx_guard, rx_bw, rx_guard, input_l, power_b, output_l]):
+                    raise ValueError("Faltan campos obligatorios.")
+            # TODO: Añadir validaciones de rangos numéricos si es necesario
+
+        except Exception as e:
+            self.app_ref.gui_queue.put(('main_status', f"Error recopilando datos FFT: {e}", "red"))
+            self.app_ref.run_button_state(is_running=False)
+            return
+
+        # *** Ejecutar los tests Robot secuencialmente con un FOR mas adelante *** Para ello creamos un vector de tuplas, definidas por los () 
+        tests_to_run = [
+            ("Program IBTU FFT S1 General", [
+                f"LOCAL_PERIODICITY:{local_p}", f"REMOTE_PERIODICITY:{remote_p}",
+                f"SNR_THRESHOLD_ACTIVATION:{snr_act}", f"SNR_THRESHOLD_DEACTIVATION:{snr_deact}",
+                f"RX_OPERATION_MODE_LIST_STR:{rx_op_mode_list_str}"
+            ]),
+            ("Program IBTU FFT S2 General", [
+                f"TX_BW:{tx_bw}", f"TX_GUARD_FREQ:{tx_guard}", f"TX_APPLICATION_MODE_LIST_STR:{tx_app_mode_list_str}",
+                f"RX_BW:{rx_bw}", f"RX_GUARD_FREQ:{rx_guard}", f"RX_APPLICATION_MODE_LIST_STR:{rx_app_mode_list_str}"
+            ]),
+            ("Program IBTU FFT S3 General", [
+                f"INPUT_LEVEL:{input_l}", f"POWER_BOOSTING:{power_b}", f"OUTPUT_LEVEL:{output_l}"
+            ])
+        ]
+
+        all_passed = True
+        for test_name, variables in tests_to_run: # Las dos variables que recorremos son cada una de las tuplas de la lista de tests "tests_to_run" 
+            self.app_ref.gui_queue.put(('main_status', f"Ejecutando {test_name}...", "orange"))
+            # Ejecutamos el test y esperamos a que termine antes de pasar al siguiente
+            # El listener interno manejará el estado final (pass/fail)
+            success = robot_executor._run_robot_test(
+                self.app_ref,
+                test_name=test_name,
+                preferred_filename="Module_IBTU_FFT.robot",
+                variables=variables,
+                # No necesitaremos on_success aquí, solo necesitamos saber si pasó o falló, ya que no necesitamos rellenar ninguna función callback.
+                on_pass_message=f"{test_name} completado.",
+                on_fail_message=f"Fallo en {test_name}.",
+                # ¡Importante! Poner block=True para que espere
+                block=True 
+            )
+            if not success:
+                all_passed = False
+                # Podríamos detener la secuencia si uno falla. Aunque preferimos que acabe de programar el resto por el momento.
+                # self.app_ref.gui_queue.put(('main_status', f"Secuencia FFT detenida por fallo en {test_name}.", "red"))
+                # break 
+
+        # Mensaje final (independiente del estado de ejecución, que es manejado por el listener)
+        if all_passed:
+                self.app_ref.gui_queue.put(('main_status', "Programación IBTU FFT completada.", "green"))
+        else:
+                self.app_ref.gui_queue.put(('main_status', "Programación IBTU FFT completada con errores.", "orange"))
+
+        # Importante: run_button_state(False) ya es llamado por el listener al final de _run_robot_test
+        # Si no usas block=True, necesitarías llamarlo aquí después del último hilo.

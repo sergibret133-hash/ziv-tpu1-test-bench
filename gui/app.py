@@ -149,17 +149,16 @@ class ModernTestRunnerApp(ctk.CTk):
             
             "Retrieve IBTU FFT Full Configuration": [],
             "Program IBTU FFT S1 General": [
-                "${LOCAL_PERIODICITY}", 
-                "${REMOTE_PERIODICITY}", 
-                "${SNR_THRESHOLD_ACTIVATION}", 
-                "${SNR_THRESHOLD_DEACTIVATION}",
-                "${OPERATION_MODE_CMD}",
-                "${OPERATION_MODE}"
-                
+                "${LOCAL_PERIODICITY}", "${REMOTE_PERIODICITY}",
+                "${SNR_THRESHOLD_ACTIVATION}", "${SNR_THRESHOLD_DEACTIVATION}",
+                "${RX_OPERATION_MODE_LIST_STR}"
             ],
-            "Program IBTU FFT S2 Times": [
+            "Program IBTU FFT S2 General": [
+                "${TX_BW}", "${TX_GUARD_FREQ}", "${TX_APPLICATION_MODE_LIST_STR}",
+                "${RX_BW}", "${RX_GUARD_FREQ}", "${RX_APPLICATION_MODE_LIST_STR}"
             ],
-            "Program IBTU FFT S3 Levels": [
+            "Program IBTU FFT S3 General": [
+                "${INPUT_LEVEL}", "${POWER_BOOSTING}", "${OUTPUT_LEVEL}"
             ],
         }
 
@@ -178,7 +177,7 @@ class ModernTestRunnerApp(ctk.CTk):
             "Current Loop and Blocking State": ('update_alignment_states', ['listener']),
             "Retrieve Full SNMP Configuration": ('full_snmp_config_display', ['listener']),
             "Retrieve IBTU ByTones Full Configuration": ('update_ibtu_full_config', ['listener']),
-
+            "Retrieve IBTU FFT Full Configuration": ('update_ibtu_fft_config', ['ibtu_fft_data']),
 
         }
 # **************************************************************************************************************
@@ -195,6 +194,8 @@ class ModernTestRunnerApp(ctk.CTk):
         self.duration_map = { "Permanente": "0", "10 segundos": "10", "30 segundos": "30", "60 segundos": "60", "10 minutos": "600" }
         self.loop_type_map = { "NONE": "0", "INTERNAL": "1", "LINE": "2" }
         self.loop_type_map_rev = {v: k for k, v in self.loop_type_map.items()}
+        
+        # IBTU_ByTones
         self.ibtu_rx_op_mode_map = {"Normal": "0", "Telesignalling": "1"}
         self.ibtu_app_type_map = {"Blocking": "0", "Permissive": "1", "Direct": "2"}
         self.ibtu_app_type_map_rev = {v: k for k, v in self.ibtu_app_type_map.items()}
@@ -211,14 +212,31 @@ class ModernTestRunnerApp(ctk.CTk):
             all_freqs.update(freq_list)
         self.all_ibtu_frequencies = sorted(list(all_freqs), key=int)
 
+        # IBTU FFT
+        # Para coger el valor corresondiente a la clave en formato leído y pasarselo al archivo .robot
+        self.fft_bw_map = {"1 kHz": "1", "2 kHz": "2", "4 kHz": "3"}
+        self.fft_rx_op_mode_map = {"Normal": "0", "Telesignalling": "1"}
+        self.fft_app_mode_map = {"Blocking": "0", "Permissive": "1", "Direct": "2"}
+
+        # El listener nos pasa el valor en formato numerico y accediendo al diccionario _rev correspondiente obtenemos el valor (formato legible) de la clave correspondiente. 
+        self.fft_bw_map_rev = {v: k for k, v in self.fft_bw_map.items()}
+        self.fft_rx_op_mode_map_rev = {v: k for k, v in self.fft_rx_op_mode_map.items()}
+        self.fft_app_mode_map_rev = {v: k for k, v in self.fft_app_mode_map.items()}
+        
         # LISTAS PARA WIDGETS Y ESTADO
         self.tx_checkboxes, self.rx_checkboxes, self.tx_logic_checkboxes, self.rx_logic_checkboxes = [], [], [], []
         self.host_widgets, self.input_activation_checkboxes, self.log_buttons = [], [], []
         self.inputs_are_active, self.activation_timer = None, None
         self.loop1_widgets, self.loop2_widgets, self.blocking1_widgets, self.blocking2_widgets = {}, {}, {}, {}
         self.alignment_timers = {}
+            # IBTU ByTones
         self.ibtu_tx_table_widgets, self.ibtu_rx_table_widgets = [], []
         self.tx_command_groups, self.rx_command_groups = {}, {}
+            # IBTU FFT
+        self.fft_rx_op_mode_combos = []
+        self.fft_tx_app_mode_combos = []
+        self.fft_rx_app_mode_combos = []
+        
         
         # INICIALIZACIONES PARA EL PLANIFICADOR
         self.task_sequence = []
@@ -260,12 +278,31 @@ class ModernTestRunnerApp(ctk.CTk):
             return callback_special
         
         # Para el resto de casos con atributos SI enviamos una tupla
+        # def callback(listener):
+        #     # Recopila los valores de los atributos del listener
+        #     params = [getattr(listener, attr, None) for attr in attr_names]
+        #     # Envía el mensaje completo a la cola de la GUI
+        #     self.gui_queue.put(tuple([message_type] + params))
+        # return callback 
+    
         def callback(listener):
-            # Recopila los valores de los atributos del listener
-            params = [getattr(listener, attr, None) for attr in attr_names]
-            # Envía el mensaje completo a la cola de la GUI
+            params = []
+            print(f"DEBUG CALLBACK: Intentando leer atributos: {attr_names}") # <-- Añadir
+            for attr in attr_names:
+                value = getattr(listener, attr, 'ATTRIBUTE_NOT_FOUND') # <-- Añadir default
+                print(f"DEBUG CALLBACK: Atributo '{attr}' = {value}") # <-- Añadir
+                params.append(value)
+
+            # Comprobar si se encontró algo que no sea el valor por defecto
+            if 'ATTRIBUTE_NOT_FOUND' in params:
+                print(f"ERROR CALLBACK: No se encontraron todos los atributos para {message_type}")
+                # Decide si quieres enviar el mensaje igualmente o no
+                # self.gui_queue.put(tuple([message_type] + params)) # Envía con error
+                return # No envía nada si falta un atributo
+
+            print(f"DEBUG CALLBACK: Poniendo en cola: {tuple([message_type] + params)}") # <-- Añadir
             self.gui_queue.put(tuple([message_type] + params))
-        return callback 
+        return callback
     
            
     def process_gui_queue(self):
@@ -319,6 +356,9 @@ class ModernTestRunnerApp(ctk.CTk):
                     # message[3] = result
                     # message[4] = color
                     ui_tab_monitoring._update_correlation_display(self, message[1], message[2], message[3], message[4])
+                elif msg_type == 'update_ibtu_fft_config':
+                    # message[1] contendrá el diccionario fft_config_data
+                    ui_tab_equipment._update_ibtu_fft_config_display(self, message[1])
 
         except queue.Empty:
             pass    # Si no hay mensajes no hacemos nada

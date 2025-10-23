@@ -13,7 +13,8 @@ from logic import db_handler # Importamos el manejador de la BD
 from robot.api import TestSuiteBuilder
 import glob
 import socket
-
+import robot
+from robot.api import logger
 
 TEST_DIRECTORY = "tests"
 
@@ -69,14 +70,21 @@ class TestOutputListener:
         self.ibtu_tx_guard_freq = None
         self.ibtu_rx_scheme = None
         self.ibtu_rx_guard_freq = None
-
+        # IBTU FFT attributes
+        self.ibtu_fft_data = None   # En este caso hemos hecho uso de un diccioanrio .json en lugar de los parsers que hacíamos uso en los atributos de IBTU ByTones (es mas sencillo)
 
         
     def log_message(self, message):
+        raw_msg = message.message # Sin strip()
+        msg_level = message.level  
         msg_text = message.message.strip()
+
+        print(f"STRIPPED MSG Content (repr): {repr(msg_text)}")
+
 
         # --- Lógica de GUI_STATUS y GUI_ERROR (debe ir primero) ---
         if msg_text.startswith("GUI_ERROR:"):
+            print("DEBUG LISTENER: Matched GUI_ERROR")
             error_msg = msg_text.split(":", 1)[1].strip()
             self.app_ref.gui_queue.put(('main_status', f"Error: {error_msg}", "red"))
             return
@@ -87,6 +95,7 @@ class TestOutputListener:
             return
             
         if msg_text.startswith("GUI_ALARMS::"):
+            print("DEBUG LISTENER: Matched GUI_ALARMS")
             json_part = msg_text.split("::", 1)[1]
             try:
                 self.alarms_data = json.loads(json_part)
@@ -94,10 +103,59 @@ class TestOutputListener:
                 error_msg = f"Error al procesar datos JSON de alarmas: {e}"
                 self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
             return # Salimos para no procesar más
-            
+        
+        
+        
+        target_prefix = "GUI_DATA::"
+        # Comprueba si el prefijo está EN CUALQUIER PARTE (más robusto)
+        if target_prefix in msg_text:
+            print(f"DEBUG LISTENER: ENCONTRADO '{target_prefix}' en mensaje nivel {msg_level}: {repr(msg_text)}")
+            try:
+                start_index = msg_text.find(target_prefix) + len(target_prefix)
+                json_part = msg_text[start_index:]
+                print(f"DEBUG LISTENER: Extracted JSON part: {repr(json_part)}")
+
+                data = json.loads(json_part)
+                print(f"DEBUG LISTENER: JSON decoded OK: {type(data)}")
+
+                # Identificar y guardar
+                if isinstance(data, list) and data and isinstance(data[0], dict) and 'timestamp' in data[0] and 'alarm_event' in data[0]:
+                    print("DEBUG LISTENER: Identified as Chronological.")
+                    self.chronological_log = data
+                    print(f"DEBUG LISTENER: self.chronological_log NOW IS: {self.chronological_log}")
+
+                elif isinstance(data, dict) and 'local_periodicity' in data and 'snr_activation' in data: # FFT
+                    print("DEBUG LISTENER: Identified as FFT.")
+                    self.ibtu_fft_data = data
+                    print(f"DEBUG LISTENER: self.ibtu_fft_data NOW IS: {self.ibtu_fft_data}")
+
+                # elif isinstance(data, dict) and 'rx_scheme' in data : # ByTones (Si usas JSON)
+                #     print("DEBUG LISTENER: Identified as ByTones.")
+                #     self.ibtu_bytones_data = data
+                #     print(f"DEBUG LISTENER: self.ibtu_bytones_data NOW IS: {self.ibtu_bytones_data}")
+
+                else:
+                    print(f"WARN LISTENER: GUI_DATA JSON content not recognized: {data}")
+
+            except json.JSONDecodeError as e:
+                error_msg = f"ERROR LISTENER: Error decoding GUI_DATA JSON: {e} | JSON Part: {repr(json_part)}"
+                print(error_msg)
+                self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
+            except Exception as e:
+                error_msg = f"ERROR LISTENER: Unexpected error processing GUI_DATA: {e}"
+                print(error_msg)
+                self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
+
+            # Hacemos return aquí porque ya procesamos el mensaje GUI_DATA
+            return
+        
+        
+        
+        
         
         # --- Lógica para variables normales (nivel INFO) ---
         if message.level == 'INFO':
+            print("DEBUG LISTENER: Checking INFO variables...") # <-- Usa print()
             parsers = {
                 '${Detected_Module_List}': 'modules',
                 '${Tp1_info}': 'tp1_info',
@@ -140,22 +198,38 @@ class TestOutputListener:
 
             }
             for key, attr in parsers.items():
-                if key in msg_text and '=' in msg_text:
-                    if msg_text.find(key) < msg_text.find('='):
-                        self._parse_and_set(msg_text, attr)
-                        return
+                # Comprobación más segura: Asegura que la clave esté al inicio y seguida de ' = '
+                if msg_text.startswith(key) and ' = ' in msg_text:
+                     # Podrías añadir una comprobación extra si quieres:
+                     # if msg_text.find(key) < msg_text.find(' = '):
+                     print(f"DEBUG LISTENER: Matched INFO variable: {key}") # Usa print
+                     try: # Añadir try-except por si _parse_and_set falla
+                         self._parse_and_set(msg_text, attr)
+                     except Exception as e:
+                          print(f"ERROR LISTENER: Failed to parse INFO var '{key}': {e}")
+                     # Una vez encontrada y parseada, podemos salir
+                     print("DEBUG LISTENER: Returning after processing INFO variable.") # Usa print
+                     return # <-- Hacemos return AQUÍ
 
+            print("DEBUG LISTENER: No INFO variable matched.") # <-- Usa print()
+                 
         # --- Lógica para el cronológico (nivel WARN) ---
-        elif message.level == 'WARN':
-            if msg_text.startswith("GUI_DATA::"):
-                json_part = msg_text.split("::", 1)[1]
-                try:
-                    parsed_value = ast.literal_eval(json_part)
-                    self.chronological_log = parsed_value
-                except Exception as e:
-                    error_msg = f"Error al procesar datos del cronológico: {e}"
-                    self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
+        # elif message.level == 'WARN':
+        #     if msg_text.startswith("GUI_DATA::"):
+        #         json_part = msg_text.split("::", 1)[1]
+        #         try:
+        #             parsed_value = ast.literal_eval(json_part)
+        #             self.chronological_log = parsed_value
+        #         except Exception as e:
+        #             error_msg = f"Error al procesar datos del cronológico: {e}"
+        #             self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
         
+        # AHORA HAREMOS USO DE UN ELIF MAS GENERICO PARA PODER TRATAR CON MAS VARIABLES A PARTE DE LA DEL CRONOLOGICO
+        # Ahora manejamos GUI_DATA:: aquí, fuera del if INFO o WARN específico
+        
+        # --- NUEVO DEBUG: Justo antes de comprobar GUI_DATA:: ---
+
+    
     def _parse_and_set(self, text, attribute):
         """Helper to parse a string and set an attribute."""
         try:
