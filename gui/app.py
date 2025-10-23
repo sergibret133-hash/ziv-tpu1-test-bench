@@ -488,6 +488,7 @@ class ModernTestRunnerApp(ctk.CTk):
         if hasattr(self, 'query_snmp_config_button'): self.query_snmp_config_button.configure(state=idle_state)
         if hasattr(self, 'program_snmp_config_button'): self.program_snmp_config_button.configure(state=idle_state)
         if hasattr(self, 'refresh_alignment_button'): self.refresh_alignment_button.configure(state=idle_state)
+        if hasattr(self, 'query_ibtu_fft_button'): self.query_ibtu_fft_button.configure(state=idle_state)
 
     # Scheduler Buttons
         if hasattr(self, 'run_sequence_button'):
