@@ -14,7 +14,7 @@ class SNMPController:
     def _execute_retrieve_snmp_config(self):
         """Runs the test to get current SNMP configuration."""
         test_name="Retrieve Full SNMP Configuration"
-        
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True 
         
         try:
@@ -32,6 +32,7 @@ class SNMPController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 preferred_filename="Test3_SNMP.robot",
                 on_success=success_callback,
                 on_pass_message="Configuración SNMP consultada con éxito!",
@@ -51,6 +52,7 @@ class SNMPController:
         
     def _execute_execute_snmp_config(self):
         """Reads the GUI fields and runs the test to program SNMP settings."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -85,6 +87,7 @@ class SNMPController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Execute Full SNMP Configuration",
+                session_id=active_id,
                 preferred_filename="Test3_SNMP.robot",
                 variables=variables,
                 on_pass_message="Configuración SNMP programada con éxito!",

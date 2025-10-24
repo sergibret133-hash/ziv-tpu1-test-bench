@@ -13,7 +13,7 @@ class EquipmentController:
 
     def _execute_list_modules_test(self):
         test_name="List Detected Modules"
-        
+        active_id = self.app_ref.active_session_id
         # Activamos semaforo
         self.app_ref.is_main_task_running = True
         
@@ -33,6 +33,7 @@ class EquipmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 on_success=success_callback,
                 on_pass_message="Estado de entradas consultado con éxito!",
                 on_fail_message="Fallo al consultar el estado de las entradas."
@@ -50,7 +51,7 @@ class EquipmentController:
 
     def _execute_view_assigned_test(self):
         test_name="List assigned Modules and Commands assigned"
-        
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -69,6 +70,7 @@ class EquipmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 on_success=success_callback,
                 on_pass_message="Assigned modules info retrieved!",
                 on_fail_message="Failed to retrieve assigned modules!"
@@ -86,7 +88,7 @@ class EquipmentController:
 
     def _execute_assign_modules_test(self):
         self.app_ref.is_main_task_running = True
-        
+        active_id = self.app_ref.active_session_id
         try:
             tp1 = self.app_ref.entry_tp1.get()
             tp2 = self.app_ref.entry_tp2.get()
@@ -98,6 +100,7 @@ class EquipmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Assign Prioritized Detected Modules",
+                session_id=active_id,
                 variables=[f"TP1:{tp1}", f"TP2:{tp2}"],
                 on_pass_message="Modules assigned successfully!",
                 on_fail_message="Failed to assign modules!"
@@ -114,6 +117,7 @@ class EquipmentController:
 
     def _execute_program_commands_test(self):
         """Executes the 'Command Number Assignments' test."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         try:
             tp1_tx = self.app_ref.tp1_tx_entry.get()
@@ -129,6 +133,7 @@ class EquipmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Command Number Assignments",
+                session_id=active_id,
                 variables=[
                     f"TP1_TX_Command_Number_NUM_COMMANDS:{tp1_tx}",
                     f"TP1_RX_Command_Number_NUM_COMMANDS:{tp1_rx}",
@@ -151,14 +156,17 @@ class EquipmentController:
 
     def _execute_configure_timezone_test(self):
         """Executes the 'Configure Display Time Zone' test."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
             selected_tz_name = self.app_ref.timezone_selector.get()
             tz_value = self.app_ref.timezone_map.get(selected_tz_name)
 
-            self.app_ref._run_robot_test(
+            robot_executor._run_robot_test(
+                self.app_ref,
                 test_name="Open_BasicConfiguration+Configure Display Time Zone",
+                session_id=active_id,
                 variables=[f"Time_zone:{tz_value}"],
                 on_pass_message=f"Zona horaria configurada a {selected_tz_name}!",
                 on_fail_message="Fallo al configurar la zona horaria!"
@@ -177,6 +185,7 @@ class EquipmentController:
 
     def _execute_program_assignments_test(self):
         """Reads the checkbox grids and runs the assignment test."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -192,6 +201,7 @@ class EquipmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Program Command Assignments",
+                session_id=active_id,
                 preferred_filename="Test2_CommandAssign.robot",
                 variables=[
                     f"tx_matrix_str:{str(tx_matrix)}",
@@ -215,6 +225,7 @@ class EquipmentController:
     
     def _execute_log_command_info_test(self):
         test_name="Log and Save Teleprotection Commands and Inputs/Outputs"
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -233,6 +244,7 @@ class EquipmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 preferred_filename="Test2_CommandAssign.robot",
                 on_success=success_callback,
                 on_pass_message="Configuration data retrieved!",
@@ -255,7 +267,7 @@ class EquipmentController:
     def _execute_retrieve_ibtu_config(self):
         """Runs the test to get current IBTU ByTones configuration."""
         test_name="Retrieve IBTU ByTones Full Configuration"
-        
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         try:
             # Buscamos la info de actualizacion de la GUI en nuestro mapa inicializado en init (el mismo que usa el planificador cuando ejecuta los tests)
@@ -273,6 +285,7 @@ class EquipmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 preferred_filename="Module_IBTU_ByTones.robot",
                 on_success=success_callback,
                 on_pass_message="Configuración IBTU consultada con éxito!",
@@ -291,6 +304,7 @@ class EquipmentController:
 
     def _execute_program_ibtu_s1(self):
         """Gathers data from the General section and runs the corresponding test."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -319,6 +333,7 @@ class EquipmentController:
                 robot_executor._run_robot_test(
                     self.app_ref,
                     test_name="Program IBTU ByTones S1 General",
+                    session_id=active_id,
                     preferred_filename="Module_IBTU_ByTones.robot",
                     variables=variables,
                     on_pass_message="Sección General de IBTU programada con éxito.",
@@ -342,6 +357,7 @@ class EquipmentController:
 
     def _execute_program_ibtu_s2(self):
         """Gathers data from the Frequencies section and runs the corresponding test."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         try:
             try:
@@ -391,6 +407,7 @@ class EquipmentController:
                 robot_executor._run_robot_test(
                     self.app_ref,
                     test_name="Program IBTU ByTones S2 Frequencies",
+                    session_id=active_id,
                     preferred_filename="Module_IBTU_ByTones.robot",
                     variables=variables,
                     on_pass_message="Frecuencias de IBTU programadas con éxito.",
@@ -416,6 +433,7 @@ class EquipmentController:
 
     def _execute_program_ibtu_s3(self):
         """Gathers data from the Levels section and runs the corresponding test."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -447,6 +465,7 @@ class EquipmentController:
                 robot_executor._run_robot_test(
                     self.app_ref,
                     test_name="Program IBTU ByTones S3 Levels",
+                    session_id=active_id,
                     preferred_filename="Module_IBTU_ByTones.robot",
                     variables=variables,
                     on_pass_message="Niveles de IBTU programados con éxito.",
@@ -472,7 +491,8 @@ class EquipmentController:
     def _execute_retrieve_ibtu_fft_config(self):
         """Ejecuta el test Robot para consultar la configuración de IBTU FFT."""
         test_name = "Retrieve IBTU FFT Full Configuration"
-
+        active_id = self.app_ref.active_session_id
+        active_id = self.app_ref.active_session_id
         # Crear el callback para actualizar la GUI en caso de éxito
         gui_update_info = self.app_ref.test_gui_update_map.get(test_name)   # Nos da los atributos necesarios pasandole como argumento el test mediante mapeo de la variable test_gui_update_map
         success_callback = None
@@ -484,6 +504,7 @@ class EquipmentController:
         robot_executor._run_robot_test(
             self.app_ref,
             test_name=test_name,
+            session_id=active_id,
             preferred_filename="Module_IBTU_FFT.robot",
             on_success=success_callback,    # la funcion _run_robot_test EJECUTARÁ la funcion callback en caso de que el test finalice correctamente, enviando los datos de forma segura hacia la GUI mediante la cola
             on_pass_message="Configuración IBTU FFT consultada.",
@@ -498,7 +519,7 @@ class EquipmentController:
 
     def _execute_program_ibtu_fft_full(self):
         """Recopila datos de la GUI y ejecuta los tests Robot para programar IBTU FFT."""
-
+        active_id = self.app_ref.active_session_id
         # --- Recopilar datos de la GUI ---
         try:
             # Sección 1
@@ -564,6 +585,7 @@ class EquipmentController:
             success = robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 preferred_filename="Module_IBTU_FFT.robot",
                 variables=variables,
                 # No necesitaremos on_success aquí, solo necesitamos saber si pasó o falló, ya que no necesitamos rellenar ninguna función callback.

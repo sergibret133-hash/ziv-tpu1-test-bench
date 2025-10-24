@@ -60,7 +60,12 @@ class ModernTestRunnerApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         
         # ************ 2. INICIALIZACIÓN DEL ESTADO Y DATOS ************
-        self.browser_process = None
+        self.sessions = {
+            'A': {'ip': None, 'process': None, 'status': 'Desconectado', 'session_file': os.path.abspath("session_A.json")},
+            'B': {'ip': None, 'process': None, 'status': 'Desconectado', 'session_file': os.path.abspath("session_B.json")}
+        }
+        self.active_session_id = 'A' # 'A' o 'B'
+
 
         self.is_main_task_running = False    # Para indicar al hilo que hace pull para comprobar alarmas si hay algun otro test ejecutandose y así no interferir.
 
@@ -318,8 +323,13 @@ class ModernTestRunnerApp(ctk.CTk):
                 
                 if msg_type == 'main_status':
                     self._update_status(message[1], message[2])
-                elif msg_type == 'session_status':
-                    self._update_session_status(message[1], message[2])
+                    
+                elif msg_type == 'session_status_A':   
+                    self._update_session_status('A', message[1], message[2])    # Le pasamos como primer argumento "session_id" 'A' o 'B' correspondiente.
+                    
+                elif msg_type == 'session_status_B':
+                    self._update_session_status('B', message[1], message[2])    # Le pasamos como primer argumento "session_id" 'A' o 'B' correspondiente.
+                    
                 elif msg_type == 'snmp_listener_status':
                     ui_tab_monitoring._update_snmp_listener_status(self, message[1], message[2])
                 elif msg_type == 'enable_buttons':
@@ -393,11 +403,29 @@ class ModernTestRunnerApp(ctk.CTk):
         return tab_view
     
     def on_closing(self):
-        """Handles the window closing event to ensure cleanup."""
-        if self.browser_process:
-            robot_executor._execute_stop_browser(self)
-        self.destroy()      
+        """Handles the window closing event to ensure cleanup for all active sessions."""
+        for session_id, session_info in self.sessions.items():
+            if session_info['process']:
+                print(f"INFO: Attempting to close session {session_id}...")
+                try:
+                    robot_executor._execute_stop_browser(self)
+                except Exception as e:
+                    print(f"ERROR: Could not initiate cleanup for session {session_id}: {e}")
             
+            else:
+                print(f"INFO: Session {session_id} was not active, skipping cleanup.")
+            
+        self.destroy()      
+
+           
+    def set_active_context(self, value):
+        """Llamado por el CTkSegmentedButton para cambiar el equipo activo."""
+        session_map = {"Equipo A": "A", "Equipo B": "B"}
+        self.active_session_id = session_map.get(value, 'A')    # Dejamos por defecto el valor 'A' por seguridad.
+        print(f"Sesion activa cambiada a: {self.active_session_id}")
+        
+        self.run_button_state(is_running=self.is_main_task_running)           
+         
     def _update_debug_log(self, text):
         """Appends text to the debug log display."""
         self.debug_log_display.configure(state="normal")
@@ -456,21 +484,42 @@ class ModernTestRunnerApp(ctk.CTk):
         current_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
 
     def run_button_state(self, is_running):
-        # self.is_task_running = is_running
-        session_active = self.browser_process is not None
+        # Con la siguiente linea podemos configurar estado botones de la sesion activa guardada en active_session_id.
+        print(f"DEBUG: Checking context {self.active_session_id}")
+        active_session_info = self.sessions[self.active_session_id] # Nos quedamos con los valores de la clave ({A o B} = active_session_id) del diccionario
+        session_active = active_session_info['process'] is not None     # Nos quedamos con el estado de la sesion activa.
+        print(f"DEBUG: Is session {self.active_session_id} active? {session_active}")
         
             # --- LÓGICA CENTRALIZADA DE ESTADOS ---
         # Estado para botones que deben estar ACTIVOS cuando NO se está ejecutando nada (idle).
         idle_state = "normal" if session_active and not is_running else "disabled"
+        print(f"DEBUG: Calculated idle_state: {idle_state}")
         # Estado para botones que deben estar ACTIVOS SÓLO MIENTRAS se está ejecutando algo (running).
         running_state = "normal" if session_active and is_running else "disabled"
         
         if is_running:
             self.gui_queue.put(('main_status', "Status: Running...", "orange"))
 
-        # Enable/Disable Session Buttons
-        self.connect_button.configure(state="disabled" if session_active else "normal") # Bloqueamos boton conectar si ya hay sesión, sino normal
-        self.disconnect_button.configure(state="normal" if session_active else "disabled") # Habilitamos boton desconectar si hay sesión, sino bloqueado
+
+        # *** CONFIGURACION DE BOTONES DE SESIÓN (A y B por separado) - Habilitacion/Deshabilitacion ***
+        # A:
+        if hasattr(self, 'connect_button_A'):  # Solo si el widget ya ha sido credo...
+            session_A_active = self.sessions['A']['process'] is not None
+            # Si la sesion está activa ->
+                # -> Boton de conectar deshabilitado. Si no lo está, habilitado.
+            self.connect_button_A.configure(state="disabled" if session_A_active else "normal")
+                # -> Boton de desconectar habilitado. Si no lo está, deshabilitado.
+            self.disconnect_button_A.configure(state="normal" if session_A_active else "disabled")
+
+        # B:
+        if hasattr(self, 'connect_button_B'):  # Solo si el widget ya ha sido credo...
+            session_B_active = self.sessions['B']['process'] is not None
+            # Si la sesion está activa ->
+                # -> Boton de conectar deshabilitado. Si no lo está, habilitado.
+            self.connect_button_B.configure(state="disabled" if session_B_active else "normal")
+                # -> Boton de desconectar habilitado. Si no lo está, deshabilitado.
+            self.disconnect_button_B.configure(state="normal" if session_B_active else "disabled")
+
 
         # Botones de ejecución de tests
         # Por defecto, todos los botones de acción principal utilizaran el tipo de estado idle (accionables si hay sesión y no hay nada corriendo)
@@ -511,7 +560,7 @@ class ModernTestRunnerApp(ctk.CTk):
             btn.configure(state="normal" if not is_running else "disabled")
 
     # Widgets Logic for Alignment Tab (Activate Inputs...)
-        if is_running: # Para evitar que intentemos hacer cambios mientras algo está corriendo, bloqueamos todo
+        if is_running: # Para evitar que intentemos hacer cambios mientras algo está corriendo, bloqueamos todo. Independientemente que tengamos o no una sesion activa. Es decir, los botones de activar/desactivar loops/bloqueos no se actualizaran. 
             for widgets in [self.loop1_widgets, self.loop2_widgets, self.blocking1_widgets, self.blocking2_widgets]:
                 if widgets:
                     widgets['activate_button'].configure(state="disabled")
@@ -520,19 +569,21 @@ class ModernTestRunnerApp(ctk.CTk):
                     if 'type_combo' in widgets:
                         widgets['type_combo'].configure(state="disabled")
         elif session_active:
-                    for widgets_dict, is_loop_flag in [(self.loop1_widgets, True), (self.loop2_widgets, True), 
-                                                        (self.blocking1_widgets, False), (self.blocking2_widgets, False)]:
-                        if widgets_dict:
-                            is_active = "Activo" in widgets_dict['status_label'].cget("text")
-                            ui_tab_alignment._update_alignment_row_ui(widgets_dict, is_active, is_loop_flag)
+            for widgets_dict, is_loop_flag in [(self.loop1_widgets, True), (self.loop2_widgets, True), 
+                                                (self.blocking1_widgets, False), (self.blocking2_widgets, False)]:  # En cada iteracion le vamos pasando el conjunto de widgets junto al valor que queremos que tenga is_loop_flag
+                if widgets_dict:    # Si el conjunto de widgets existen, los actualizamos con _update_alignment_row_ui
+                    is_active = "Activo" in widgets_dict['status_label'].cget("text")   # Comprobamos que la clave status_label del conjunto de widgets que estamos iterando sea "Activo". Si no lo es, la variable is_active será false.->
+                                                                                        # -> En definitiva, comprobamos el estado del conjunto de widgets, si están o no activos 
+                    ui_tab_alignment._update_alignment_row_ui(widgets_dict, is_active, is_loop_flag)    # _update_alignment_row_ui se encargara de actualizar los botones (habilitará o deshabilitará) ->
+                                                                                                        # -> en funcion del estado de los loops o bloqueos (si encuentra el texto "Activo" deberá deshabilitar activate_button)
         else:
-                    for widgets in [self.loop1_widgets, self.loop2_widgets, self.blocking1_widgets, self.blocking2_widgets]:
-                        if widgets:
-                            widgets['activate_button'].configure(state="disabled")
-                            widgets['deactivate_button'].configure(state="disabled")
-                            widgets['duration_combo'].configure(state="disabled")
-                            if 'type_combo' in widgets:
-                                widgets['type_combo'].configure(state="disabled")
+            for widgets in [self.loop1_widgets, self.loop2_widgets, self.blocking1_widgets, self.blocking2_widgets]:
+                if widgets:
+                    widgets['activate_button'].configure(state="disabled")
+                    widgets['deactivate_button'].configure(state="disabled")
+                    widgets['duration_combo'].configure(state="disabled")
+                    if 'type_combo' in widgets:
+                        widgets['type_combo'].configure(state="disabled")
 
 
 # ************************************************************************************
@@ -587,8 +638,18 @@ class ModernTestRunnerApp(ctk.CTk):
     def _update_status(self, message, color):
         self.status_label.configure(text=message, text_color=color)
         
-    def _update_session_status(self, message, color):
-        self.session_status_label.configure(text=f"Estado: {message}", text_color=color)
+    def _update_session_status(self, session_id, message, color):
+        """Actualiza la etiqueta de estado para la Sesión A o B."""
+        if session_id == 'A':
+            #  widgets session_status_label_A/B creados en ui_sidebar.py
+            if hasattr(self, 'session_status_label_A'): # hasattr asegura que solo se intente hacer el .configure widgets que ya han sido creados
+                self.session_status_label_A.configure(text=f"Estado: {message}", text_color=color)
+            self.sessions['A']['status'] = message
+            
+        elif session_id == 'B':
+            if hasattr(self, 'session_status_label_B'):
+                self.session_status_label_B.configure(text=f"Estado: {message}", text_color=color)
+            self.sessions['B']['status'] = message
 
 
     def _build_grid(self, parent_frame, row_prefix, num_rows, num_cols, checkbox_list):

@@ -15,12 +15,15 @@ Resource    Keep_Alive.robot
 
 
 # Library    trapReceiver_Robot_1
-Suite Setup    Conectar A Navegador Existente
+Suite Setup    Run Keyword    Conectar A Navegador Existente    ${SESSION_ALIAS}    ${SESSION_FILE_PATH}
 Test Setup        Check And Handle Session Expired Popup
 Suite Teardown
 # Resource    IOCS_config.robot
 
 *** Variables ***
+# SESSION VARIABLES
+${SESSION_ALIAS}
+${SESSION_FILE_PATH}
 #VALID LOGIN & ACCES TO WEBPAGE
 ${USER}    admin
 ${PASS}    Passwd%4002    #Login PASS

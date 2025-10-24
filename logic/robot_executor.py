@@ -244,31 +244,44 @@ class TestOutputListener:
 
 
 
-def _run_robot_test(app_ref, test_name, variables=None, on_success=None, on_pass_message="Test Passed!", on_fail_message="Test Failed!", preferred_filename=None, output_filename=None, log_file="log.html", report_file="report.html", suppress_gui_updates=False):
+def _run_robot_test(app_ref, test_name, session_id, variables=None, on_success=None, on_pass_message="Test Passed!", on_fail_message="Test Failed!", preferred_filename=None, output_filename=None, log_file="log.html", report_file="report.html", suppress_gui_updates=False, block=False):
     """Generic function to run a robot test."""
-    session_file_path = os.path.abspath("session.json")
-    if not app_ref.browser_process or not os.path.exists(session_file_path):
-        app_ref.gui_queue.put(('main_status', "Error: No hay una sesión activa. Por favor, conéctese primero.", "red"))
+    try:
+        session_info = app_ref.sessions[session_id]
+        session_file_path = session_info['session_file']
+    except KeyError:
+        app_ref.gui_queue.put(('main_status', f"Error: ID de la sesion '{session_id}' desconocido", "red"))
+        return
+    
+    
+    # Comprobamos que el proceso de la sesion NO este activo
+    if not session_info['process'] or not os.path.exists(session_file_path):
+        app_ref.gui_queue.put(('main_status', f"Error: Sesion {session_id} no esta activa. Por favor, conéctese primero.", "red"))
         app_ref.gui_queue.put(('enable_buttons', None))
         return
-
+# *********************************************************************************************
     robot_script_path = _find_test_file(app_ref, test_name, preferred_filename=preferred_filename)
     if not robot_script_path:
         app_ref.gui_queue.put(('main_status', f"Error: Test case '{test_name}' not found.", "red"))
         app_ref.run_button_state(is_running=False)
         return
 
-    ip = app_ref.entry_ip.get()
-    all_variables = [f"IP_ADDRESS:{ip}"]
+    ip = session_info['ip']
+    session_file_path = session_info['session_file']
+    
+    all_variables = [
+        f"IP_ADDRESS:{ip}",
+        f"SESSION_ALIAS:{session_id}",
+        f"SESSION_FILE_PATH:{session_file_path}"
+    ]
+    
     if variables:
         all_variables.extend(variables)
 
-
-    output_file = output_filename if output_filename else "output.xml" # Para usar el nombre único
-    result_code = -1 # Valor por defecto en caso de error
+    output_file = output_filename if output_filename else "output.xml" # Para usar un nombre único
+    result_code = -1 # Valor por defecto por si falla
 
     listener = TestOutputListener(app_ref)
-    
 
     try:
         result_code = robot.run(
@@ -294,10 +307,9 @@ def _run_robot_test(app_ref, test_name, variables=None, on_success=None, on_pass
             
     except Exception as e:
         if not suppress_gui_updates:
-            app_ref.gui_queue.put(('main_status', f"Critical Error: {e}", "#E74C3C"))
+            app_ref.gui_queue.put(('main_status', f"Critical Error (Sesión {session_id}): {e}", "#E74C3C"))
             
     finally: 
-        # app_ref.is_main_task_running = False # Luz verde Semaforo Monitoreo Alarmas
         if not suppress_gui_updates:    
             app_ref.gui_queue.put(('enable_buttons', None))
         
@@ -307,95 +319,102 @@ def _run_robot_test(app_ref, test_name, variables=None, on_success=None, on_pass
 
 
 # ***** MANEJO DE LA SESIÓN DEL NAVEGADOR *****
-def _start_browser_process_thread(app_ref):
-    """Starts the browser process in a separate thread."""
+def _start_browser_process_thread(app_ref,session_id, ip_adress):
+    """Starts the browser process in a separate thread for an specific session."""
     app_ref.run_button_state(is_running=True)
-    threading.Thread(target=_execute_start_browser, args=(app_ref,), daemon=True).start()
+    threading.Thread(target=_execute_start_browser, args=(app_ref, session_id, ip_adress), daemon=True).start()
 
-def _execute_start_browser(app_ref):
+def _execute_start_browser(app_ref, session_id, ip_adress):
     """Executes start_browser.robot to open and maintain the browser session."""
     app_ref.is_main_task_running = True
 
-    
-    
+    session_info = app_ref.sessions[session_id]
+    session_file_path = session_info['session_file']
+
     try:
-        if app_ref.browser_process:
-            app_ref.gui_queue.put(('main_status', "Aviso: Ya hay una sesión activa.", "orange"))
-            app_ref.gui_queue.put(('enable_buttons', None))
+        if session_info['process']:
+            app_ref.gui_queue.put(('main_status', "Aviso: Sesión {session_id} ya está activa.", "orange"))
+            app_ref.gui_queue.put(('enable_buttons', None)) # Desbloqueamos botones
+            app_ref.is_main_task_running = False    # Desbloqueamos GUI
             return
         
-        app_ref.gui_queue.put(('session_status', "Conectando...", "orange"))
+
+        app_ref.gui_queue.put((f'session_status_{session_id}', "Conectando...", "orange"))
         
-        session_file_path = os.path.abspath("session.json")
         if os.path.exists(session_file_path):
             os.remove(session_file_path)
 
-        ip = app_ref.entry_ip.get()
         command = [
             sys.executable, '-m', 'robot',
             '--outputdir', 'test_results',
             '--log', 'None', '--report', 'None',
-            '--variable', f'IP_ADDRESS:{ip}',
+            '--variable', f'IP_ADDRESS:{ip_adress}',
             '--variable', f'SESSION_FILE_PATH:{session_file_path}',
+            '--variable', f'SESSION_ALIAS:{session_id}',
             os.path.join(TEST_DIRECTORY, 'start_browser.robot')
         ]
         
-        app_ref.browser_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        session_info['process'] = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         session_file_found = False
-        timeout = 50 # segundos
+        timeout = 50 
         start_time = time.time()
+        
         while time.time() - start_time < timeout:
             if os.path.exists(session_file_path):
                 session_file_found = True
                 break
-            if app_ref.browser_process.poll() is not None:
-                break 
+            if session_info['process'].poll() is not None:  # poll() es una pregunta rapida que no bloquea. Si el proceso sigue corriendo -> nos devuelve None
+                break   # si el proceso acaba, entramos en el if y hacemos el brake saliendo del bucle de espera.
+            # Anotar que si el proceso no termina, tenemos el timeout como condicion del while que nos haria salir tambien.
+            # Si salimos del while desde la 1a condicion if os.path.exists(session_file_path) es que todo va bien y la sesion se ha creado.
+            # Si salimos del while desde la 2a condicion es que el proceso ha terminado, pero es posible que no se haya creado la sesión (Fallo)
             time.sleep(0.5)
 
         if session_file_found:
-            app_ref.gui_queue.put(('session_status', "Conectado", "green"))
-            app_ref.gui_queue.put(('main_status', "Sesión iniciada. Listo para ejecutar acciones.", "white"))
-            # app_ref.session_controller.start_keep_alive()   # Llamamos al creador del hilo "_keep_alive_loop", que se ejecutará cada 15s
+            app_ref.gui_queue.put((f'session_status_{session_id}', "Conectado", "green"))
+            app_ref.gui_queue.put(('main_status', f"Sesión {session_id} iniciada. Listo para ejecutar acciones.", "white"))
+            session_info['ip']= ip_adress   # Solo en caso de haber podido conectarnos a la sesion recien creada -> Guardarmos la dirección IP en el diccionario de la sesion llamando a app_ref.
+        
         else:
             app_ref.gui_queue.put(('session_status', "Error", "red"))
-            app_ref.gui_queue.put(('main_status', "Error: No se pudo iniciar la sesión. Revise la consola.", "red"))
-            stdout, stderr = app_ref.browser_process.communicate()
-            print("--- STDOUT del proceso del navegador ---")
+            app_ref.gui_queue.put(('main_status', f"Error: No se pudo iniciar la sesión {session_id}. Revise la consola.", "red"))
+            stdout, stderr = session_info['process'].communicate()
+            print(f"--- STDOUT Sesion {session_id} ---")
             print(stdout)
-            print("--- STDERR del proceso del navegador ---")
+            print(f"--- STDERR Sesion {session_id} ---")
             print(stderr)
-            # Si el tiempo se agota, nos aseguramos de terminar el proceso para que no quede huérfano.
-            if app_ref.browser_process.poll() is None: # Si el proceso todavía está corriendo
-                app_ref.browser_process.terminate()
-            app_ref.browser_process = None
+            # Si el tiempo se agota (salimos del while sin que el proceso haya terminado y sin haber generado el archivo de la sesion), nos aseguramos de terminar el proceso para que no quede corriendo.
+            if session_info['process'].poll() is None: # Si el proceso todavía está corriendo
+                session_info['process'].terminate()
+            session_info['process'] = None
 
-        app_ref.gui_queue.put(('enable_buttons', None))
-        
     except Exception as e:
-        app_ref.gui_queue.put(('main_status', f"Error en la tarea: {e}", "red")) 
+        app_ref.gui_queue.put(('main_status', f"Error en la tarea {session_id} : {e}", "red")) 
         
     finally:
         app_ref.is_main_task_running = False
         app_ref.gui_queue.put(('enable_buttons', None))
             
-def _stop_browser_process_thread(app_ref):
-    """Stops the browser process in a separate thread."""
+def _stop_browser_process_thread(app_ref, session_id):
+    """Stops the browser process in a separate thread for an specific session."""
     app_ref.run_button_state(is_running=True)
-    threading.Thread(target=_execute_stop_browser, args=(app_ref,), daemon=True).start()
+    threading.Thread(target=_execute_stop_browser, args=(app_ref, session_id), daemon=True).start()
     
-def _execute_stop_browser(app_ref):
+def _execute_stop_browser(app_ref, session_id):
     """Executes a robot script to close all browser windows and then cleans up."""
     app_ref.is_main_task_running = True
 
+    session_info = app_ref.sessions[session_id]
+    session_file_path = session_info['session_file']
+    
     try:
-        # app_ref.session_controller.stop_keep_alive()
-        session_file_path = os.path.abspath("session.json")
-        # Comprobamos si hay alguna sesion activa que haga falta cerrar.
-        if not app_ref.browser_process:
-            app_ref.gui_queue.put(('main_status', "Aviso: No hay ninguna sesión activa para cerrar.", "orange"))
-            app_ref.gui_queue.put(('enable_buttons', None))
+        if not session_info['process']:
+            app_ref.gui_queue.put(('main_status', f"Aviso: Sesión {session_id} no está activa.", "orange"))
+            app_ref.gui_queue.put(('enable_buttons', None)) # Desbloqueamos botones
+            app_ref.is_main_task_running = False    # Desbloqueamos GUI
             return
+        
         
         try:
             # Ejecutamos el script "close_all_browsers.robot"
@@ -405,21 +424,20 @@ def _execute_stop_browser(app_ref):
                 stdout=None, stderr=None
             )
         except Exception as e:
-            app_ref.gui_queue.put(('main_status', f"Error al cerrar la sesión: {e}", "red"))
+            app_ref.gui_queue.put(('main_status', f"Error al cerrar la sesión {session_id}: {e}", "red"))
             print(f"Error ejecutando close_all_browsers.robot, se terminará el proceso a la fuerza. Error: {e}")
             
         
         finally: # Limpieza final, se haya producido un error o no.
-            if app_ref.browser_process:
-                app_ref.browser_process.terminate()
-                app_ref.browser_process = None
+            if session_info['process']:
+                session_info['process'].terminate()
+                session_info['process'] = None
                 
             if os.path.exists(session_file_path):
                 os.remove(session_file_path)
 
-            app_ref.gui_queue.put(('main_status', "Sesión del navegador cerrada.", "white"))
-            app_ref.gui_queue.put(('session_status', "Desconectado", "orange"))
-            app_ref.gui_queue.put(('enable_buttons', None))
+            app_ref.gui_queue.put(('main_status', f"Sesión {session_id} del navegador cerrada.", "white"))
+            app_ref.gui_queue.put((f'session_status_{session_id}', "Desconectado", "orange"))
             
     except Exception as e:
         app_ref.gui_queue.put(('main_status', f"Error en la tarea: {e}", "red")) 

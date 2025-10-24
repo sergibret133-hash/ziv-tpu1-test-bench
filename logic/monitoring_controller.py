@@ -18,7 +18,7 @@ class MonitoringController:
     def _execute_retrieve_chrono_log(self):
         """Runs the test to get the full chronological register."""
         test_name="Retrieve Chronological Register"
-        
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         
@@ -38,6 +38,7 @@ class MonitoringController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 preferred_filename="Chronological_Register.robot",
                 on_success=success_callback,
                 on_pass_message="Registro cronológico consultado.",
@@ -56,11 +57,12 @@ class MonitoringController:
         
     def _execute_clear_chrono_log(self):
         """Runs the test to clear the chronological register."""
-        
+        active_id = self.app_ref.active_session_id
         try:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Delete Chronological Register",
+                session_id=active_id,
                 preferred_filename="Chronological_Register.robot",
                 on_success=lambda listener: self.app_ref.gui_queue.put(('update_chrono_log_display', "Registro cronológico borrado.")),
                 on_pass_message="Registro cronológico borrado con éxito.",
@@ -80,6 +82,7 @@ class MonitoringController:
     def _execute_capture_last_entries(self):
         """Runs the test to capture the last N entries from the log."""
         test_name="Capture Last Chronological Log Entries"
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -115,6 +118,7 @@ class MonitoringController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 preferred_filename="Chronological_Register.robot",
                 variables=variables,
                 on_success=success_callback,
@@ -163,6 +167,7 @@ class MonitoringController:
 
     def _run_correlation_test(self):
         """Ejecuta la lógica de la prueba en un hilo."""
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True # Ponemos el semáforo en ROJO
         
         # Escenario de Pruebas:
@@ -180,6 +185,7 @@ class MonitoringController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Input Activation",
+                session_id=active_id,
                 preferred_filename="InputActivation.robot",
                 variables=[
                     f"ACTIVATE_DEACTIVATE:{activate_deactivate}",
@@ -199,7 +205,7 @@ class MonitoringController:
             robot.run(
                 script_path,
                 test="Capture Last Chronological Log Entries",
-                variable=[f"IP_ADDRESS:{self.app_ref.entry_ip.get()}", "EXPECTED_NUM_ENTRIES:2"],
+                variable=[f"IP_ADDRESS:{self.app_ref.sessions[active_id]['ip']}", f"SESSION_ALIAS:{active_id}", "EXPECTED_NUM_ENTRIES:2"],
                 listener=chrono_listener,
                 output=None, log=None, report=None, stdout=None, stderr=None
             )

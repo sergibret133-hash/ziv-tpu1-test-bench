@@ -9,6 +9,10 @@ Resource    Keep_Alive.robot
 # Creamos una Keyword intermedia para poder pasar la variable dinámica ${SESSION_FILE_PATH} desde la GUI
 Test Setup    Connect To The Right Session
 *** Variables ***
+# SESSION VARIABLES
+${SESSION_ALIAS}
+${SESSION_FILE_PATH}
+
 ${SESSION_FILE}    session.json
 
 
@@ -19,4 +23,4 @@ Close All Browser Windows
 *** Keywords ***
 Connect To The Right Session
     [Documentation]    Keyword intermedia que se usa como test_Setup para poder pasar la variable dinámica ${SESSION_FILE_PATH} desde la GUI y conectar a la sesión existente para posteriormente ejecutar el testcase que cierra la sesion del navegador pasado como variable.
-    Conectar A Navegador Existente    session_file=${SESSION_FILE}
+    Conectar A Navegador Existente    ${SESSION_ALIAS}    ${SESSION_FILE_PATH}

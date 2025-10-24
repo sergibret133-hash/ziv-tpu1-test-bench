@@ -262,9 +262,19 @@ class SchedulerController:
 
     def _execute_task_sequence(self):
         """
-        Motor de ejecución de la secuencia de tareas.
-        NOTA: Este método se ejecuta en un hilo secundario.
+        Ejecución de la secuencia de tareas.
+        Este método se ejecuta en un hilo secundario.
         """
+        try:
+            active_id = self.app_ref.active_session_id
+            if not self.app_ref.sessions[active_id]['process']:
+                raise Exception(f"Sesión {active_id} no está conectada.")
+        except Exception as e:
+            self.app_ref.gui_queue.put(('scheduler_log', f"Error: {e}", "red"))
+            self.app_ref.gui_queue.put(('enable_buttons', None))
+            return
+        
+        
         self.app_ref.is_main_task_running = True
         
         sequence_failed = False
@@ -337,6 +347,7 @@ class SchedulerController:
                     task_result = robot_executor._run_robot_test(
                         self.app_ref,
                         test_name=task['test_name'],
+                        session_id=active_id,
                         variables=task.get('variables', []),
                         preferred_filename=task.get('filename'),
                         output_filename=output_file,

@@ -9,30 +9,24 @@ class BrowserManager:
     _main_session_id = None
 
     # Utilizamos tecnica de MonkeyPatching para conectar a una sesion existente
-    def conectar_a_navegador_existente(self, session_file="session.json"):
+    def conectar_a_navegador_existente(self, session_alias, session_file_path):
         """
-        Conecta a una sesión de navegador existente (sin crear nuevas ventanas).
+        Conecta a una sesión de navegador existente (sin crear nuevas ventanas), usando un alias y un path de archivo de la sesion.
         """
         try:
             selenium_lib = BuiltIn().get_library_instance('SeleniumLibrary')
             builtin = BuiltIn()
 
-            # Limpiamos navegadores previos
-            try:
-                builtin.run_keyword('Close All Browsers')
-            except Exception:
-                pass
-
             # Cargamos info de la sesión
-            session_file_path = os.path.abspath(session_file)
+            # session_file_path = os.path.abspath(session_file_path)
             with open(session_file_path, 'r') as f:
                 session_data = json.load(f)
 
             executor_url = session_data['executor_url']
             session_id = session_data['session_id']
-            BrowserManager._main_session_id = session_id
+            # BrowserManager._main_session_id = session_id  # No hace falta si no usamos cleanup_ghost_drivers
 
-            # --- Truco: crear Remote sin lanzar newSession ---
+            # *** Truco: crear Remote sin lanzar newSession ***
             original_execute = webdriver.Remote.execute
 
             def new_execute(self, command, params=None):
@@ -57,22 +51,24 @@ class BrowserManager:
             webdriver.Remote.execute = original_execute
 
             # Registramos el driver sin abrir nada nuevo
-            alias = "main_session"
+            alias = session_alias
             selenium_lib._drivers.register(driver, alias)
             builtin.run_keyword('Switch Browser', alias)
 
-            builtin.log(f"DEBUG: Conectado a sesión existente: {session_id}", "INFO")
-
+            builtin.log(f"DEBUG: Conectado a sesión {alias} existente: {session_id}", "INFO")
+            
+        except FileNotFoundError:
+            BuiltIn().fatal_error(f"Suite Setup (Conectar a Sesión {session_alias}) falló: No se encontró el archivo de sesión en '{session_file_path}'")
         except Exception as e:
-            BuiltIn().fatal_error(f"Suite Setup falló: {e}")
+            BuiltIn().fatal_error(f"Suite Setup (Conectar a Sesión {session_alias}) falló al procesar '{session_file_path}': {e}")
 
     def cleanup_ghost_drivers(self):
         """
         Cierra cualquier navegador 'fantasma' que no corresponda a la sesión principal.
         """
         try:
-            builtin = BuiltIn()
             selenium_lib = BuiltIn().get_library_instance('SeleniumLibrary')
+            builtin = BuiltIn()
             
             if not BrowserManager._main_session_id:
                 builtin.log("DEBUG: No hay sesión principal registrada, se omite limpieza.", "INFO")

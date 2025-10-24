@@ -13,11 +13,13 @@ Library    BrowserManager.py
 Resource    Keep_Alive.robot
 
 
-Suite Setup    Conectar A Navegador Existente    session_file=${ALARMS_SESSION_FILE}
+Suite Setup    Run Keyword    Conectar A Navegador Existente    ${SESSION_ALIAS}    ${ALARMS_SESSION_FILE}
 Test Setup        Check And Handle Session Expired Popup
 Suite Teardown
 
 *** Variables ***
+# SESSION VARIABLES
+${SESSION_ALIAS}
 ${ALARMS_SESSION_FILE}    alarms_session.json
 ${ALARMS_DATA}    ${EMPTY}
 

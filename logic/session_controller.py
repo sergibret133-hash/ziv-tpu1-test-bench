@@ -2,8 +2,6 @@ import threading
 import time
 import robot
 
-
-
 class SessionController:
     def __init__(self, app_ref):
         self.app_ref = app_ref
@@ -33,15 +31,22 @@ class SessionController:
             la sesión ha expirado y la renueva si es necesario.
             """
             while not self.stop_event.is_set():
-                time.sleep(55) # Espera 15 segundos
-
-                # ¡Solo actúa si hay sesión y NINGÚN OTRO TEST está corriendo!
-                if self.app_ref.browser_process and not self.app_ref.is_task_running:
-                    try:
-                        robot.run(
-                            'tests/Keep_Alive.robot',
-                            output=None, log=None, report=None,
-                            stdout=None, stderr=None
-                        )
-                    except Exception as e:
-                        print(f"ERROR en el guardián de sesión: {e}")
+                time.sleep(55) # Espera 55 segundos
+                for session_id, session_info in self.app_ref.sessions.items():  # Recorremos las claves de sessions (session_id) y la info (que tiene de nuevo un formato de diccionario)
+                    # ¡Solo actúa si la sesion que estamos iterando esta activa y NINGÚN OTRO TEST está corriendo!
+                    if session_info['process'] and not self.app_ref.is_main_task_running:
+                        try:
+                            print(f"INFO (Keep-Alive): Intentando mantener activa la sesión {session_id}")
+                            robot.run(
+                                'tests/Keep_Alive.robot',
+                                variable=[
+                                    f"IP_ADDRESS:{session_info['ip']}",
+                                    f"SESSION_ALIAS:{session_id}",
+                                    f"SESSION_FILE_PATH:{session_info['session_file']}"
+                                ],
+                                output=None, log=None, report=None,
+                                stdout=None, stderr=None
+                            )
+                        except Exception as e:
+                            print(f"ERROR en el guardián de sesión para {session_id}: {e}")
+                            

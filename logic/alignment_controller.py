@@ -15,7 +15,7 @@ class AlignmentController:
     def _execute_retrieve_inputs_state(self):
         """Runs the test to get the current state of the inputs."""
         test_name="Retrieve Inputs Activation State"
-        
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -35,7 +35,7 @@ class AlignmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
-            
+                session_id=active_id,
                 preferred_filename="Test4_Alignment.robot",
                 on_success=success_callback,
                 # on_success=lambda listener: app_ref.gui_queue.put(('update_input_activation_display', listener.input_activation_state, listener.input_info)),    # COMO UTILIZAMOS EL MAPA Y LA FUNCION CALLBACK, LO HACEMOS DIFERENTE
@@ -77,7 +77,7 @@ class AlignmentController:
     def _execute_program_inputs_activation(self):
         """Gathers data from the GUI and runs the input activation test. Assumes validation has passed."""
         self.app_ref.is_main_task_running = True
-        
+        active_id = self.app_ref.active_session_id
         try:
             activate_deactivate = "1" if self.app_ref.activation_mode_var.get() == "activate" else "0"
             duration_str = self.app_ref.duration_combobox.get()
@@ -98,6 +98,7 @@ class AlignmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Input Activation",
+                session_id=active_id,
                 preferred_filename="Test4_Alignment.robot",
                 variables=variables,
                 on_success=on_success_callback,
@@ -124,7 +125,7 @@ class AlignmentController:
     def _execute_refresh_alignment_states(self):
         """Runs a single test to get all loop and blocking states."""
         test_name = "Current Loop and Blocking State"
-        
+        active_id = self.app_ref.active_session_id
         self.app_ref.is_main_task_running = True
         
         try:
@@ -144,6 +145,7 @@ class AlignmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name=test_name,
+                session_id=active_id,
                 preferred_filename="Test4_Alignment.robot",
                 on_success=success_callback,
                 on_pass_message="Estados de alineación consultados.",
@@ -164,7 +166,7 @@ class AlignmentController:
     def _execute_program_loop(self, tp_number, activate):
         """Gathers data and runs the Program Teleprotection Loop test."""
         self.app_ref.is_main_task_running = True
-        
+        active_id = self.app_ref.active_session_id
         try:
             activate_deactivate = '1' if activate else '0'
             
@@ -195,6 +197,7 @@ class AlignmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Program Teleprotection Loop",
+                session_id=active_id,
                 preferred_filename="Test4_Alignment.robot",
                 variables=variables,
                 on_success=on_success_callback,
@@ -216,7 +219,7 @@ class AlignmentController:
     def _execute_program_blocking(self, tp_number, activate):
         """Gathers data and runs the Program Teleprotection Blocking test."""
         self.app_ref.is_main_task_running = True
-        
+        active_id = self.app_ref.active_session_id
         try:
             activate_deactivate = '1' if activate else '0'
 
@@ -244,6 +247,7 @@ class AlignmentController:
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Program Teleprotection Blocking",
+                session_id=active_id,
                 preferred_filename="Test4_Alignment.robot",
                 variables=variables,
                 on_success=on_success_callback,

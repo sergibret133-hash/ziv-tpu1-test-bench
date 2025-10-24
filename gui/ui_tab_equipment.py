@@ -26,17 +26,10 @@ def _populate_basic_config_tab(app_ref, tab_frame):
     """Populates the 'Basic Configuration' tab with its widgets."""
     tab_frame.grid_columnconfigure(0, weight=1)
 
-    ip_frame = ctk.CTkFrame(tab_frame)
-    ip_frame.grid(row=0, column=0, pady=(10, 5), padx=20, sticky="ew")
-    ctk.CTkLabel(ip_frame, text="Terminal IP Address:").pack(side="left", padx=(10,5), pady=10)
-    app_ref.entry_ip = ctk.CTkEntry(ip_frame, placeholder_text="Ex: 10.212.40.87")
-    app_ref.entry_ip.pack(side="left", padx=(0,10), pady=10, expand=True, fill="x")
-    app_ref.entry_ip.insert(0, "10.212.40.87")
-
     main_scroll_frame = ctk.CTkScrollableFrame(tab_frame, label_text="Funcionalidades de Configuración Básica")
-    main_scroll_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
+    main_scroll_frame.grid(row=0, column=0, padx=20, pady=10, sticky="nsew")
     main_scroll_frame.grid_columnconfigure(0, weight=1)
-    tab_frame.grid_rowconfigure(1, weight=1)
+    tab_frame.grid_rowconfigure(0, weight=1)
 
     list_modules_frame = ctk.CTkFrame(main_scroll_frame)
     list_modules_frame.grid(row=0, column=0, pady=10, sticky="ew")
