@@ -27,7 +27,7 @@ class EquipmentController:
 
             #*********************************************************************************************************
                 # Utilizamos el método de creación de  callback dinamico
-                success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)
+                success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)
             #*********************************************************************************************************
                 
             robot_executor._run_robot_test(
@@ -64,7 +64,7 @@ class EquipmentController:
 
             #*********************************************************************************************************
                 # Utilizamos el método de creación de  callback dinamico
-                success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)
+                success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)
             #*********************************************************************************************************
             
             robot_executor._run_robot_test(
@@ -238,7 +238,7 @@ class EquipmentController:
 
             #*********************************************************************************************************
                 # Utilizamos el método de creación de  callback dinamico
-                success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)
+                success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)
             #*********************************************************************************************************
             
             robot_executor._run_robot_test(
@@ -279,7 +279,7 @@ class EquipmentController:
 
             #*********************************************************************************************************
                 # Utilizamos el método de creación de  callback dinamico
-                success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)
+                success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)
             #*********************************************************************************************************
 
             robot_executor._run_robot_test(
@@ -499,7 +499,7 @@ class EquipmentController:
         if gui_update_info:
             message_type, attr_names = gui_update_info  # Los atributos que necesitamos: 'update_ibtu_fft_config', ['ibtu_fft_data']
             # Suponiendo que modificas el listener para tener 'ibtu_fft_data'
-            success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)   # Preparamos la funcion callback para ser modificada una vez ejecutado el test, PERO NO LA EJECUTAMOS AUN!
+            success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)   # Preparamos la funcion callback para ser modificada una vez ejecutado el test, PERO NO LA EJECUTAMOS AUN!
 
         robot_executor._run_robot_test(
             self.app_ref,

@@ -539,31 +539,60 @@ def _update_guard_tone_options(app_ref, selected_app_type, guard_combo):
 
 def _update_ibtu_full_config_display(app_ref, listener):
     """Updates the entire IBTU ByTones tab with data from the listener object."""
+    if listener is None:
+        print("DEBUG: _update_ibtu_full_config_display recibió None, limpiando UI...")
+        # Llamamos a _update_ibtu_tones_table con None
+        _update_ibtu_tones_table(app_ref, app_ref.ibtu_tx_tone_widgets, None, is_tx=True)
+        _update_ibtu_tones_table(app_ref, app_ref.ibtu_rx_tone_widgets, None, is_tx=False)
+        # Reseteamos los combos a valores por defecto o vacíos
+        # Usamos hasattr para asegurarnos de que los widgets existen antes de intentar configurarlos
+        if hasattr(app_ref, 'ibtu_tx_tone_widgets') and 'scheme_combo' in app_ref.ibtu_tx_tone_widgets:
+             app_ref.ibtu_tx_tone_widgets['scheme_combo'].set("") # O un valor por defecto si prefieres
+        if hasattr(app_ref, 'ibtu_tx_tone_widgets') and 'guard_combo' in app_ref.ibtu_tx_tone_widgets:
+             app_ref.ibtu_tx_tone_widgets['guard_combo'].set("") # O un valor por defecto
+        if hasattr(app_ref, 'ibtu_rx_tone_widgets') and 'scheme_combo' in app_ref.ibtu_rx_tone_widgets:
+             app_ref.ibtu_rx_tone_widgets['scheme_combo'].set("") # O un valor por defecto
+        if hasattr(app_ref, 'ibtu_rx_tone_widgets') and 'guard_combo' in app_ref.ibtu_rx_tone_widgets:
+             app_ref.ibtu_rx_tone_widgets['guard_combo'].set("") # O un valor por defecto
+        return # Salimos, no hay más que hacer
+    
     _update_ibtu_tones_table(app_ref, app_ref.ibtu_tx_tone_widgets, listener.ibtu_tx_tones, is_tx=True)
     _update_ibtu_tones_table(app_ref, app_ref.ibtu_rx_tone_widgets, listener.ibtu_rx_tones, is_tx=False)
 
     if listener.ibtu_tx_scheme is not None:
         scheme_text = app_ref.ibtu_scheme_map_rev.get(str(listener.ibtu_tx_scheme), "2+2 (1)")
-        app_ref.ibtu_tx_tone_widgets['scheme_combo'].set(scheme_text)
+        if hasattr(app_ref, 'ibtu_tx_tone_widgets') and 'scheme_combo' in app_ref.ibtu_tx_tone_widgets:
+            app_ref.ibtu_tx_tone_widgets['scheme_combo'].set(scheme_text)
     
-    if app_ref.ibtu_tx_table_widgets:
-        first_tone_app_type = app_ref.ibtu_tx_table_widgets[0]['app_type'].get()
-        app_ref._update_guard_tone_options(first_tone_app_type, app_ref.ibtu_tx_tone_widgets['guard_combo'])
+    if hasattr(app_ref, 'ibtu_tx_table_widgets') and app_ref.ibtu_tx_table_widgets:
+        if 'app_type' in app_ref.ibtu_tx_table_widgets[0]:
+            # if app_ref.ibtu_tx_table_widgets:
+            first_tone_app_type = app_ref.ibtu_tx_table_widgets[0]['app_type'].get()
+            if hasattr(app_ref, 'ibtu_tx_tone_widgets') and 'guard_combo' in app_ref.ibtu_tx_tone_widgets:
+                app_ref._update_guard_tone_options(first_tone_app_type, app_ref.ibtu_tx_tone_widgets['guard_combo'])
 
     if listener.ibtu_tx_guard_freq:
-        app_ref.ibtu_tx_tone_widgets['guard_combo'].set(listener.ibtu_tx_guard_freq)
+        if hasattr(app_ref, 'ibtu_tx_tone_widgets') and 'guard_combo' in app_ref.ibtu_tx_tone_widgets:
+            app_ref.ibtu_tx_tone_widgets['guard_combo'].set(listener.ibtu_tx_guard_freq)
 
     if listener.ibtu_rx_scheme is not None:
         scheme_text = app_ref.ibtu_scheme_map_rev.get(str(listener.ibtu_rx_scheme), "2+2 (1)")
-        app_ref.ibtu_rx_tone_widgets['scheme_combo'].set(scheme_text)
-
+        if hasattr(app_ref, 'ibtu_rx_tone_widgets') and 'scheme_combo' in app_ref.ibtu_rx_tone_widgets:
+            app_ref.ibtu_rx_tone_widgets['scheme_combo'].set(scheme_text)
+            
     if app_ref.ibtu_rx_table_widgets:
         first_tone_app_type = app_ref.ibtu_rx_table_widgets[0]['app_type'].get()
         app_ref._update_guard_tone_options(first_tone_app_type, app_ref.ibtu_rx_tone_widgets['guard_combo'])
+        
+    if hasattr(app_ref, 'ibtu_rx_table_widgets') and app_ref.ibtu_rx_table_widgets:
+         if 'app_type' in app_ref.ibtu_rx_table_widgets[0]:
+            first_tone_app_type = app_ref.ibtu_rx_table_widgets[0]['app_type'].get()
+            if hasattr(app_ref, 'ibtu_rx_tone_widgets') and 'guard_combo' in app_ref.ibtu_rx_tone_widgets:
+                app_ref._update_guard_tone_options(first_tone_app_type, app_ref.ibtu_rx_tone_widgets['guard_combo'])
 
     if listener.ibtu_rx_guard_freq:
-        app_ref.ibtu_rx_tone_widgets['guard_combo'].set(listener.ibtu_rx_guard_freq)
-
+        if hasattr(app_ref, 'ibtu_rx_tone_widgets') and 'guard_combo' in app_ref.ibtu_rx_tone_widgets:
+            app_ref.ibtu_rx_tone_widgets['guard_combo'].set(listener.ibtu_rx_guard_freq)
 
 
 

@@ -18,7 +18,7 @@ ${SESSION_FILE}    session.json
 
 *** Test Cases ***
 Close All Browser Windows
-    Cerrar Sesion Principal Y Salir
+    Cerrar Sesion Principal Y Salir    ${SESSION_ALIAS}
 
 *** Keywords ***
 Connect To The Right Session

@@ -420,9 +420,14 @@ def _execute_stop_browser(app_ref, session_id):
             # Ejecutamos el script "close_all_browsers.robot"
             robot.run(
                 os.path.join(TEST_DIRECTORY, 'close_all_browsers.robot'),
+                variable=[
+                    f"SESSION_FILE_PATH:{session_file_path}",
+                    f"SESSION_ALIAS:{session_id}"
+                    ],
                 output=None, log=None, report=None,
                 stdout=None, stderr=None
             )
+
         except Exception as e:
             app_ref.gui_queue.put(('main_status', f"Error al cerrar la sesión {session_id}: {e}", "red"))
             print(f"Error ejecutando close_all_browsers.robot, se terminará el proceso a la fuerza. Error: {e}")

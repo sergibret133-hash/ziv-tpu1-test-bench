@@ -14,6 +14,7 @@ import queue
 import time # Importado para pequeñas pausas
 from pathlib import Path
 from robot.api import TestSuiteBuilder
+import time
 from tomlkit import key
 
 from Trap_Receiver_GUI_oriented import Trap_Receiver_GUI_oriented
@@ -73,6 +74,15 @@ class ModernTestRunnerApp(ctk.CTk):
         self.snmp_listener_thread = None
         
         self.gui_queue = queue.Queue()
+        
+        # Diccionario para almacenar el estado de la GUI PARA CADA SESIÓN! _create_default_gui_data_state nos devuelve la estructura de datos que necesitamos inicializar.
+        self.session_gui_data = {
+            'A': self._create_default_gui_data_state(),
+            'B': self._create_default_gui_data_state()
+        }
+        
+        
+        
         
         # MAPAS DE DATOS Y CONFIGURACIONES
         self.test_variable_map = {
@@ -248,6 +258,7 @@ class ModernTestRunnerApp(ctk.CTk):
         self.selected_task_index = -1
         self.task_widgets = [] # Para guardar las filas de la lista visual
         self.args_frame = None
+        self.task_session_selector = None
         
         # ********* 3. CARGA DE DATOS EXTERNOS *********
         self.tests_data = robot_executor._discover_and_load_tests(self, TEST_DIRECTORY)
@@ -270,50 +281,37 @@ class ModernTestRunnerApp(ctk.CTk):
         self._select_section(self.section_buttons["EQUIPMENT"], "EQUIPMENT")
         self.process_gui_queue()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        
-    def _create_gui_update_callback(self, message_type, attr_names):
-        """
-        Fábrica que crea y devuelve una función de callback personalizada.
-        """
+     
+
+    def _create_gui_update_callback(self, session_id, message_type, attr_names):
+        """ Fábrica que crea y devuelve una función de callback personalizada (session_id AÑADIDO para saber qué sesión origina los datos) """
         # Comprobamos si es un caso especial que requiere el listener completo
         if attr_names == ['listener']:
             def callback_special(listener):
-                self.gui_queue.put((message_type, listener))    # En este caso, no envía una tupla ni tampoco ningun parametro, sino todos los objectos contenidos en el listener 
+                self.gui_queue.put((message_type, session_id, listener))    # En este caso, no envía una tupla ni tampoco ningun parametro, sino todos los objectos contenidos en el listener 
             return callback_special
-        
-        # Para el resto de casos con atributos SI enviamos una tupla
-        # def callback(listener):
-        #     # Recopila los valores de los atributos del listener
-        #     params = [getattr(listener, attr, None) for attr in attr_names]
-        #     # Envía el mensaje completo a la cola de la GUI
-        #     self.gui_queue.put(tuple([message_type] + params))
-        # return callback 
     
         def callback(listener):
             params = []
-            print(f"DEBUG CALLBACK: Intentando leer atributos: {attr_names}") # <-- Añadir
+            print(f"DEBUG CALLBACK (Sesión {session_id}): Intentando leer atributos: {attr_names}")
             for attr in attr_names:
-                value = getattr(listener, attr, 'ATTRIBUTE_NOT_FOUND') # <-- Añadir default
-                print(f"DEBUG CALLBACK: Atributo '{attr}' = {value}") # <-- Añadir
+                value = getattr(listener, attr, 'ATTRIBUTE_NOT_FOUND')
+                print(f"DEBUG CALLBACK (Sesión {session_id}): Atributo '{attr}' = {value}")
                 params.append(value)
 
             # Comprobar si se encontró algo que no sea el valor por defecto
             if 'ATTRIBUTE_NOT_FOUND' in params:
-                print(f"ERROR CALLBACK: No se encontraron todos los atributos para {message_type}")
-                # Decide si quieres enviar el mensaje igualmente o no
+                print(f"ERROR CALLBACK (Sesión {session_id}): No se encontraron todos los atributos para {message_type}")
                 # self.gui_queue.put(tuple([message_type] + params)) # Envía con error
                 return # No envía nada si falta un atributo
 
-            print(f"DEBUG CALLBACK: Poniendo en cola: {tuple([message_type] + params)}") # <-- Añadir
-            self.gui_queue.put(tuple([message_type] + params))
+            print(f"DEBUG CALLBACK (Sesión {session_id}): Poniendo en cola: {tuple([message_type, session_id] + params)}")            
+            self.gui_queue.put(tuple([message_type, session_id] + params))
         return callback
     
            
     def process_gui_queue(self):
-        """
-        Process messages from the thread-safe queue to update the GUI.
-        """
+        """ Process messages from the thread-safe queue to update the GUI. """
         try:
             while not self.gui_queue.empty(): # Mientras haya mensajes en la cola
                 message = self.gui_queue.get_nowait()
@@ -321,6 +319,7 @@ class ModernTestRunnerApp(ctk.CTk):
                 print(f"DEBUG EN COLA: {message}") # DEBUG
                 msg_type = message[0]
                 
+                # *** MENSAJES GLOBALES ***
                 if msg_type == 'main_status':
                     self._update_status(message[1], message[2])
                     
@@ -333,43 +332,148 @@ class ModernTestRunnerApp(ctk.CTk):
                 elif msg_type == 'snmp_listener_status':
                     ui_tab_monitoring._update_snmp_listener_status(self, message[1], message[2])
                 elif msg_type == 'enable_buttons':
-                    self.run_button_state(is_running=False)
-                elif msg_type == 'modules_display':
-                    ui_tab_equipment._update_modules_display(self, message[1])
-                elif msg_type == 'assigned_modules_display':
-                    ui_tab_equipment._update_assigned_modules_display(self, message[1], message[2])
-                elif msg_type == 'command_assignment_grids':
-                    ui_tab_equipment._update_command_assignment_grids(self, message[1], message[2], message[3])
-                elif msg_type == 'full_snmp_config_display':
-                    ui_tab_monitoring._update_full_snmp_config_display(self, message[1])
-                elif msg_type == 'update_input_activation_display':
-                    ui_tab_alignment._update_input_activation_display(self, message[1], message[2])
-                elif msg_type == 'program_inputs_success':
-                    ui_tab_alignment._handle_program_inputs_success(self, message[1], message[2], message[3])
-                elif msg_type == 'update_chrono_log_display':
-                    ui_tab_monitoring._update_chrono_log_display(self, message[1])
+                    self.run_button_state(is_running=self.is_main_task_running)
                 elif msg_type == 'debug_log':
                     self._update_debug_log(message[1])
-                elif msg_type == 'update_alignment_states':
-                    ui_tab_alignment._update_alignment_states(self, message[1])
-                elif msg_type == 'program_alignment_success':
-                    self.alignment_controller._handle_program_alignment_success(*message[1:])
-                elif msg_type == 'update_ibtu_full_config':
-                    ui_tab_equipment._update_ibtu_full_config_display(self, message[1])
                 elif msg_type == 'scheduler_log':
-                    ui_tab_scheduler._update_scheduler_log(self, message[1], message[2])
-                elif msg_type == 'update_alarms_display':
-                    ui_tab_alarms.update_alarms_display(self, message[1])
-                elif msg_type == 'update_correlation_display':
-                    # message[1] = chrono_text_report
-                    # message[2] = trap_text_report
-                    # message[3] = result
-                    # message[4] = color
-                    ui_tab_monitoring._update_correlation_display(self, message[1], message[2], message[3], message[4])
-                elif msg_type == 'update_ibtu_fft_config':
-                    # message[1] contendrá el diccionario fft_config_data
-                    ui_tab_equipment._update_ibtu_fft_config_display(self, message[1])
+                    ui_tab_scheduler._update_scheduler_log(self, message[1], message[2])       
+                    
+                
+                # *** MENSAJES DE DATOS (con session_id)*** Consideraremos a partir de aqui message[1] como session_id
+                else:
+                    try:    # Intentamos extraer session_id y lo validamos
+                        session_id = message[1]
+                        if session_id not in self.session_gui_data: # Comprobamos que la clave 'A' o 'B' exista dentro del diccionario "session_gui_data" que contiene todos los datos de cada sesion
+                            print(f"ERROR: Mensaje '{msg_type}' recibido con session_id desconocido: {session_id}")
+                            continue
+                    except IndexError:
+                        print(f"ERROR: Mensaje de datos '{msg_type}' recibido SIN session_id.")
+                        continue
+                    
+                    is_active = (session_id == self.active_session_id)  # is_active = '1' si la sesion activa coincide con la que nos pasan por la cola.
+                    
+                    if msg_type == 'modules_display':
+                        modules_list = message[2]   # Guardamos datos en la variable local para pasarsela a la función correspondiente
+                        self.session_gui_data[session_id]['modules_list'] = modules_list     # Guardamos datos en la variable global dek diccionario de datos de la sesion
+                        
+                        # Comprobamos que estemos en la sesion activa antes de actualizar los datos
+                        if is_active:
+                            ui_tab_equipment._update_modules_display(self, modules_list)
+                        
+                        
+                    elif msg_type == 'assigned_modules_display':
+                        # Guardamos localmente
+                        tp1_info = message[2]
+                        tp2_info = message[3]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['tp1_info'] = tp1_info
+                        self.session_gui_data[session_id]['tp2_info'] = tp2_info
+                        if is_active:
+                            ui_tab_equipment._update_assigned_modules_display(self, tp1_info, tp2_info)
+        
+                    elif msg_type == 'command_assignment_grids':
+                        # Guardamos localmente
+                        command_ranges = message[2]
+                        num_inputs = message[3]
+                        num_outputs = message[4]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['command_ranges'] = command_ranges
+                        self.session_gui_data[session_id]['num_inputs'] = num_inputs
+                        self.session_gui_data[session_id]['num_outputs'] = num_outputs
 
+                        if is_active:
+                            ui_tab_equipment._update_command_assignment_grids(self, command_ranges, num_inputs, num_outputs)
+                        
+                    elif msg_type == 'full_snmp_config_display':
+                        # Guardamos localmente
+                        listener_data = message[2]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['snmp_config_listener_data'] = listener_data
+                        
+                        if is_active:
+                            ui_tab_monitoring._update_full_snmp_config_display(self, listener_data)
+                            
+                    elif msg_type == 'update_input_activation_display':
+                        # FGuardamos localmente
+                        input_state = message[2]
+                        input_info = message[3]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['input_activation_state'] = input_state
+                        self.session_gui_data[session_id]['input_info'] = input_info
+
+                        if is_active:
+                            ui_tab_alignment._update_input_activation_display(self, input_state, input_info)
+                            
+                    elif msg_type == 'program_inputs_success':
+                        # Aqui no hay datos. Procesamos solo si estamos en la sesion activa.
+                        if is_active:
+                            ui_tab_alignment._handle_program_inputs_success(self, message[2], message[3], message[4])
+                        
+                    elif msg_type == 'update_chrono_log_display':
+                        # Guardamos locaalmente
+                        log_entries = message[2]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['chronological_log_entries'] = log_entries
+
+                        if is_active:
+                            ui_tab_monitoring._update_chrono_log_display(self, log_entries) 
+
+                    elif msg_type == 'update_alignment_states':
+                        # Guardamos localmente
+                        listener_data = message[2]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['alignment_states_listener_data'] = listener_data
+
+                        if is_active:
+                            ui_tab_alignment._update_alignment_states(self, listener_data)
+                        
+                        
+                        
+                    elif msg_type == 'program_alignment_success':
+                        # Aqui no hay datos para guardar. Lo procesamos solo si la sesion activa coincide con la que nos pasan.
+                        if is_active:
+                            self.alignment_controller._handle_program_alignment_success(*message[2:])
+                            
+                    elif msg_type == 'update_ibtu_full_config':
+                        # Guardamos localmente
+                        listener_data = message[2]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['ibtu_config_listener_data'] = listener_data
+
+                        if is_active:
+                            ui_tab_equipment._update_ibtu_full_config_display(self, listener_data)
+
+                    elif msg_type == 'update_alarms_display':
+                        # Guardamos localmente
+                        alarms_data = message[2]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['alarms_data'] = alarms_data
+
+                        if is_active:
+                            ui_tab_alarms.update_alarms_display(self, alarms_data)
+                            
+                    elif msg_type == 'update_correlation_display':
+                        # message[1] = chrono_text_report
+                        # message[2] = trap_text_report
+                        # message[3] = result
+                        # message[4] = color
+                        # Este es un evento. Lo procesamos si la sesion activa es la que nos pasan por la cola.
+                        if is_active:
+                            # ui_tab_monitoring._update_correlation_display(self, message[2], message[3], message[4], message[5])
+                            # Los datos están en message[2] en adelante...
+                            ui_tab_monitoring._update_correlation_display(self, *message[2:])
+                            
+                    elif msg_type == 'update_ibtu_fft_config':
+                        # Guardamos localmente
+                        fft_config_data = message[2]
+                        # Guardamos globalmente
+                        self.session_gui_data[session_id]['ibtu_fft_config_data'] = fft_config_data
+                        if is_active:
+                            # message[1] contendrá el diccionario fft_config_data
+                            ui_tab_equipment._update_ibtu_fft_config_display(self, fft_config_data)
+
+                    else:
+                        print(f"ADVERTENCIA: Mensaje de cola no reconocido o mal formateado: {msg_type}")
         except queue.Empty:
             pass    # Si no hay mensajes no hacemos nada
         finally:
@@ -421,8 +525,15 @@ class ModernTestRunnerApp(ctk.CTk):
     def set_active_context(self, value):
         """Llamado por el CTkSegmentedButton para cambiar el equipo activo."""
         session_map = {"Equipo A": "A", "Equipo B": "B"}
-        self.active_session_id = session_map.get(value, 'A')    # Dejamos por defecto el valor 'A' por seguridad.
+        new_session_id = session_map.get(value, 'A')
+        
+        if new_session_id == self.active_session_id:
+            return  # Si estamos en la misma sesion que nos pasan para cambiar -> NO HACEMOS NADA!
+        
+        self.active_session_id = new_session_id
         print(f"Sesion activa cambiada a: {self.active_session_id}")
+        
+        self._update_gui_from_active_session()  # Funcion para refrescar todos los widgets de la GUI con los nuevos datos.
         
         self.run_button_state(is_running=self.is_main_task_running)           
          
@@ -490,7 +601,7 @@ class ModernTestRunnerApp(ctk.CTk):
         session_active = active_session_info['process'] is not None     # Nos quedamos con el estado de la sesion activa.
         print(f"DEBUG: Is session {self.active_session_id} active? {session_active}")
         
-            # --- LÓGICA CENTRALIZADA DE ESTADOS ---
+            # *** LÓGICA DE ESTADOS ***
         # Estado para botones que deben estar ACTIVOS cuando NO se está ejecutando nada (idle).
         idle_state = "normal" if session_active and not is_running else "disabled"
         print(f"DEBUG: Calculated idle_state: {idle_state}")
@@ -540,10 +651,13 @@ class ModernTestRunnerApp(ctk.CTk):
         if hasattr(self, 'query_ibtu_fft_button'): self.query_ibtu_fft_button.configure(state=idle_state)
 
     # Scheduler Buttons
+        scheduler_idle_state= "normal" if not is_running else "disabled"
+        scheduler_running_state = "normal" if is_running else "disabled"
+    
         if hasattr(self, 'run_sequence_button'):
-            self.run_sequence_button.configure(state=idle_state) # El botón de ejecutar usa 'idle_state'. Solo podremos darle al boton cuando no haya nada corriendo.
+            self.run_sequence_button.configure(state=scheduler_idle_state) # El botón de ejecutar usa 'scheduler_idle_state'. Solo podremos darle al boton cuando no haya nada corriendo.
         if hasattr(self, 'stop_sequence_button'):
-            self.stop_sequence_button.configure(state=running_state) # El botón de detener usa 'running_state'. Solo podemos darle al boton cuando haya algo corriendo (por ejemplo los tests del mismo planificador).
+            self.stop_sequence_button.configure(state=scheduler_running_state) # El botón de detener usa 'scheduler_running_state'. Solo podemos darle al boton cuando haya algo corriendo (por ejemplo los tests del mismo planificador).
         
     # SNMP listener Buttons
         # Listener States: They have to be disabled if theres something running
@@ -619,8 +733,65 @@ class ModernTestRunnerApp(ctk.CTk):
         self._update_status(f"Historial de '{os.path.basename(filepath)}' cargado.", "white")
         
 
-
 # ****** VARIOS MÉTODOS AUXILIARES ********
+    def _update_gui_from_active_session(self):
+        """
+        Refresca toda la GUI para que coincida con los datos almacenados
+        para la sesión (self.active_session_id) que acaba de ser seleccionada.
+        """
+        session_id = self.active_session_id
+        try:
+            data = self.session_gui_data[session_id]
+        except KeyError:
+            print(f"Error: No se encontraron datos de GUI para la sesión {session_id}")
+            # Si no conseguimos recuperar los datos de la sesion, asignaremos a data una estructura de datos LIMPIA! Por lo que se refrescará borrando todos los datos que habian antes.
+            data = self._create_default_gui_data_state()
+
+        print(f"Refrescando la GUI con los datos de la Sesión {session_id}...")
+
+        # *** Equipment Tab: Basic Config ***
+        # Estas funciones pueden actualizar con listas vacias? En caso de que entremos en el except anterior.
+        ui_tab_equipment._update_modules_display(self, data['modules_list'])
+        ui_tab_equipment._update_assigned_modules_display(self, data['tp1_info'], data['tp2_info'])
+        
+        # *** Equipment Tab: Command Assign ***
+        # La función puede manejar 'None' o 0?
+        ui_tab_equipment._update_command_assignment_grids(self, data['command_ranges'], data['num_inputs'], data['num_outputs'])
+        
+        # *** Equipment Tab: Module Config (IBTU ByTones) ***
+        # La función _update_ibtu_full_config_display puede manejar 'None'?
+        ui_tab_equipment._update_ibtu_full_config_display(self, data['ibtu_config_listener_data'])
+
+        # *** Equipment Tab: Module Config (IBTU FFT) *** 
+  
+        fft_data = data['ibtu_fft_config_data'] if data['ibtu_fft_config_data'] is not None else {}      # Pasamos un dict vacío si no hay datos para evitar errores .get()
+        ui_tab_equipment._update_ibtu_fft_config_display(self, fft_data)
+
+        # *** Monitoring Tab: Chrono Log *** 
+        # La función puede manejar 'None'?
+        ui_tab_monitoring._update_chrono_log_display(self, data['chronological_log_entries'])
+        
+        snmp_listener_data = data['snmp_config_listener_data']
+        
+        print(f"DEBUG SNMP REFRESH: El valor en data['snmp_config_listener_data'] es: {repr(snmp_listener_data)}")
+
+
+        # ***  Monitoring Tab: SNMP *** 
+        # La función _update_full_snmp_config_display puede manejar 'None'?
+        ui_tab_monitoring._update_full_snmp_config_display(self, snmp_listener_data)
+        
+        # ***  Alignment Tab *** 
+        # Las funciones pueden manejar 'None'?
+        ui_tab_alignment._update_input_activation_display(self, data['input_activation_state'], data['input_info'])
+        ui_tab_alignment._update_alignment_states(self, data['alignment_states_listener_data'])
+        
+        # ***  Alarms Tab *** 
+        # La función puede manejar 'None'¿
+        ui_tab_alarms.update_alarms_display(self, data['alarms_data'])
+        
+        print(f"Refresco de GUI para Sesión {session_id} completado.")
+        
+        
     def copy_to_clipboard(self, text):
         """Copies the given text to the clipboard."""
         self.clipboard_clear()
@@ -678,7 +849,6 @@ class ModernTestRunnerApp(ctk.CTk):
         """
         Consulta el diccionario de mapeo para obtener los argumentos de un test.
         """
-        # .get() es una forma segura de acceder a un diccionario.
         # Si no encuentra el test_name, devuelve una lista vacía por defecto [].
         return self.test_variable_map.get(test_name, [])
 
@@ -716,6 +886,43 @@ class ModernTestRunnerApp(ctk.CTk):
         self.snmp_ip_entry.insert(0, local_ip)
 
 
+    def _create_default_gui_data_state(self):
+        """Crea un diccionario con el estado inicial a inicializar vacío para los datos de la GUI."""
+        return {
+            # Datos de Equipment -> Basic Config
+            "modules_list": [],
+            "tp1_info": (None, ["", ""]), # (Nombre_Modulo, [TX, RX])
+            "tp2_info": (None, ["", ""]),
+
+            # Datos de Equipment -> Command Assign
+            "command_ranges": None,
+            "num_inputs": 0,
+            "num_outputs": 0,
+            "tx_checkbox_states": None,
+            "rx_checkbox_states": None,
+            "tx_logic_states": None,
+            "rx_logic_states": None,
+
+            # Datos de Equipment -> IBTU ByTones
+            "ibtu_config_listener_data": None, # Guardará el objeto listener completo
+
+            # Datos de Equipment -> IBTU FFT
+            "ibtu_fft_config_data": None, # Guardará el diccionario de config
+
+            # Datos de Monitoring -> Chrono Log
+            "chronological_log_entries": None, # Guardará las entradas
+
+            # Datos de Monitoring -> SNMP
+            "snmp_config_listener_data": None, # Guardará el objeto listener completo
+
+            # Datos de Alignment
+            "input_activation_state": None,
+            "input_info": None,
+            "alignment_states_listener_data": None, # Guardará el listener completo
+
+            # Datos de Alarms
+            "alarms_data": None
+        }
 
 
 

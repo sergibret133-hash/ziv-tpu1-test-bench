@@ -18,6 +18,19 @@ def create_alignment_tab(app_ref):
 
 def _update_alignment_states(app_ref, listener):
     """Updates the status labels, module names, and types in the Alignment tab."""
+    if listener is None:
+        print("DEBUG ALIGNMENT: listener es None. Limpiando o ignorando actualización.")
+        # Opcional: podrías limpiar la UI si quieres:
+        for widgets in [app_ref.loop1_widgets, app_ref.loop2_widgets, app_ref.blocking1_widgets, app_ref.blocking2_widgets]:
+            if widgets:
+                widgets['status_label'].configure(text="Estado: Desconocido", text_color="gray")
+                widgets['module_label'].configure(text="Módulo: -", text_color="gray")
+                if 'type_combo' in widgets:
+                    widgets['type_combo'].set("NONE")
+        return
+    
+    
+    
     if listener.loop_state_1 is not None:
         _update_alignment_row_ui(app_ref.loop1_widgets, listener.loop_state_1 in ['1', 1, 'True', True], is_loop=True)
     if listener.loop_module_name_1 is not None:

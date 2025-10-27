@@ -350,19 +350,64 @@ def _populate_snmp_config_tab(app_ref, tab_frame):
     
 def _update_full_snmp_config_display(app_ref, listener):
     """Updates the entire SNMP configuration tab with data from the listener object."""
-    
+
     def set_entry(entry, value):
+        # Nos aseguramos de que el widget existe antes de usarlo
+        if not hasattr(app_ref, entry.winfo_name()): return
+        entry.delete(0, "end")
         if value is not None:
-            entry.delete(0, "end")
             entry.insert(0, str(value))
 
+    
     def set_checkbox(cb, value):
+        if not hasattr(app_ref, cb.winfo_name()): return    # Si no existe, salimos de la función
+        cb.deselect() # Deseleccionamos por defecto
         if value is not None:
             if value in [True, 'True', 'true', '1', 1]:
                 cb.select()
-            else:
-                cb.deselect()
+    def set_combobox(combo, value_map_rev, value):
+         # Asegurarse de que el widget existe antes de usarlo
+        if not hasattr(app_ref, combo.winfo_name()): return
+        combo.set("") # Valor vacío por defecto
+        if value is not None:
+            display_text = value_map_rev.get(str(value))
+            if display_text:
+                combo.set(display_text)    
+                
+    print(f"DEBUG SNMP: entrando a _update_full_snmp_config_display. listener es: {repr(listener)}")
     
+    
+    
+    if listener is None:
+        print("DEBUG SNMP: listener ES None. Limpiando UI...")
+        set_checkbox(app_ref.snmp_agent_state_cb, None)
+        set_checkbox(app_ref.traps_enable_state_cb, None)
+        set_entry(app_ref.tpu_snmp_port_entry, None)
+        set_checkbox(app_ref.snmp_v1_v2_enable_cb, None)
+        set_entry(app_ref.snmp_v1_v2_read_entry, None)
+        set_entry(app_ref.snmp_v1_v2_set_entry, None)
+        set_checkbox(app_ref.snmp_v3_enable_cb, None)
+        set_entry(app_ref.snmp_v3_read_user_entry, None)
+        set_entry(app_ref.snmp_v3_read_pass_entry, None)
+        set_entry(app_ref.snmp_v3_read_auth_entry, None)
+        set_entry(app_ref.snmp_v3_write_user_entry, None)
+        set_entry(app_ref.snmp_v3_write_pass_entry, None)
+        set_entry(app_ref.snmp_v3_write_auth_entry, None)
+
+        # Limpiar la tabla de hosts
+        if hasattr(app_ref, 'host_widgets'):
+            for widgets in app_ref.host_widgets:
+                set_checkbox(widgets['enable'], None)
+                set_entry(widgets['ip'], None)
+                set_entry(widgets['port'], None)
+                widgets['mode'].set("") # O el valor por defecto
+
+        _toggle_snmp_config_visibility(app_ref) # Actualizar visibilidad basada en checkboxes limpios
+        print("DEBUG SNMP: UI limpiada. Saliendo con return.")
+        return # Salimos
+    
+    print(f"DEBUG SNMP: listener NO es None. Procediendo a actualizar widgets...")
+                  
     set_checkbox(app_ref.snmp_agent_state_cb, listener.snmp_agent_state)
     set_checkbox(app_ref.traps_enable_state_cb, listener.traps_enable_state)
     set_entry(app_ref.tpu_snmp_port_entry, listener.tpu_snmp_port)
@@ -377,7 +422,8 @@ def _update_full_snmp_config_display(app_ref, listener):
     set_entry(app_ref.snmp_v3_write_pass_entry, listener.snmp_v3_write_pass)
     set_entry(app_ref.snmp_v3_write_auth_entry, listener.snmp_v3_write_auth)
 
-    if listener.hosts_config and isinstance(listener.hosts_config, list):
+    # Actualizar tabla de hosts (con comprobación por si listener.hosts_config es None)
+    if hasattr(app_ref, 'host_widgets') and listener.hosts_config and isinstance(listener.hosts_config, list):
         for i, host_data in enumerate(listener.hosts_config):
             if i < len(app_ref.host_widgets):
                 widgets = app_ref.host_widgets[i]
@@ -385,9 +431,16 @@ def _update_full_snmp_config_display(app_ref, listener):
                     set_checkbox(widgets['enable'], host_data[0] == '1')
                     set_entry(widgets['ip'], host_data[1])
                     set_entry(widgets['port'], host_data[2])
-                    mode_str = app_ref.trap_mode_map_rev.get(str(host_data[3]), "V.2c Trap")
-                    widgets['mode'].set(mode_str)
-    
+                    set_combobox(widgets['mode'], app_ref.trap_mode_map_rev, host_data[3])
+    elif hasattr(app_ref, 'host_widgets'):
+         # Si listener.hosts_config es None o no es lista, limpiar tabla
+         for widgets in app_ref.host_widgets:
+                set_checkbox(widgets['enable'], None)
+                set_entry(widgets['ip'], None)
+                set_entry(widgets['port'], None)
+                widgets['mode'].set("")
+
+
     _toggle_snmp_config_visibility(app_ref)
 
     

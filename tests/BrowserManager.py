@@ -105,7 +105,7 @@ class BrowserManager:
         except Exception as e:
             BuiltIn().fatal_error(f"Test Setup (cleanup) falló: {e}")
             
-    def cerrar_sesion_principal_y_salir(self):
+    def cerrar_sesion_principal_y_salir(self, session_alias):
         """
         Cierra de forma definitiva la sesión principal del navegador usando driver.quit().
         """
@@ -113,7 +113,8 @@ class BrowserManager:
             builtin = BuiltIn()
             
             # 1. Aseguramos que estamos en el navegador principal
-            builtin.run_keyword('Switch Browser', 'main_session')
+            builtin.log(f"--- DEBUG (Python): Intentando Switch Browser a alias: {session_alias} ---", "INFO")
+            builtin.run_keyword('Switch Browser', session_alias)
             
             # 2. Obtenemos su instancia de webdriver
             selenium_lib = BuiltIn().get_library_instance('SeleniumLibrary')
@@ -122,6 +123,6 @@ class BrowserManager:
             # 3. Usamos el método más potente para cerrar todo
             driver.quit()
             
-            builtin.log("--- DEBUG: 'driver.quit()' ejecutado. Sesión finalizada. ---", "INFO")
+            builtin.log(f"--- DEBUG (Python): 'driver.quit()' ejecutado para {session_alias}. Sesión finalizada. ---", "INFO")
         except Exception as e:
-            BuiltIn().log(f"Error durante el cierre definitivo de la sesión: {e}", "WARN")
+            BuiltIn().log(f"Error durante el cierre definitivo de la sesión (alias={session_alias}): {e}", "WARN")

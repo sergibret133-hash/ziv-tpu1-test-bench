@@ -58,14 +58,21 @@ def create_scheduler_tab(app_ref):
     # Widget dinámico: Advertencia SNMP
     app_ref.snmp_warning_label = ctk.CTkLabel(creator_frame, text="⚠️ Recuerda iniciar el Listener desde MONITORING > SNMP.", text_color=("#D35400", "#F39C12"), font=ctk.CTkFont(weight="bold"))
     
+    # Selector de Sesión para la Tarea ---
+    ctk.CTkLabel(creator_frame, text="Ejecutar en:").grid(row=5, column=0, padx=10, pady=5, sticky="w")
+    app_ref.task_session_selector = ctk.CTkSegmentedButton(creator_frame, values=["Sesión A", "Sesión B"])
+    app_ref.task_session_selector.set("Sesión A") # Valor por defecto
+    app_ref.task_session_selector.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
+    
+    
     # Widget permanente: Si Falla
-    ctk.CTkLabel(creator_frame, text="Si Falla:").grid(row=6, column=0, padx=10, pady=5, sticky="w")
+    ctk.CTkLabel(creator_frame, text="Si Falla:").grid(row=7, column=0, padx=10, pady=5, sticky="w")
     app_ref.task_on_fail_combo = ctk.CTkComboBox(creator_frame, values=["Detener secuencia", "Continuar"])
-    app_ref.task_on_fail_combo.grid(row=6, column=1, padx=10, pady=5, sticky="ew")
+    app_ref.task_on_fail_combo.grid(row=7, column=1, padx=10, pady=5, sticky="ew")
 
     # Widget permanente: Botón Añadir
     add_task_button = ctk.CTkButton(creator_frame, text="Añadir Tarea a la Secuencia", command=app_ref.scheduler_controller._add_task_to_sequence)
-    add_task_button.grid(row=7, column=0, columnspan=2, padx=10, pady=10)
+    add_task_button.grid(row=8, column=0, columnspan=2, padx=10, pady=10)
 
 # --- 2. FRAME DE LA SECUENCIA DE TAREAS ---
     sequence_frame = ctk.CTkFrame(scheduler_frame)

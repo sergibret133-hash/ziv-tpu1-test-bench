@@ -32,7 +32,7 @@ class MonitoringController:
 
             #*********************************************************************************************************
                 # Utilizamos el método de creación de  callback dinamico
-                success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)
+                success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)
             #*********************************************************************************************************
             
             robot_executor._run_robot_test(
@@ -111,7 +111,7 @@ class MonitoringController:
 
             #*********************************************************************************************************
                 # Utilizamos el método de creación de  callback dinamico
-                success_callback = self.app_ref._create_gui_update_callback(message_type, attr_names)
+                success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)
             #*********************************************************************************************************
 
 
