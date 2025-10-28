@@ -321,7 +321,7 @@ class SchedulerController:
     def _stop_task_sequence(self):
         """Establece la señal para detener la ejecución de la secuencia."""
         if self.app_ref.is_main_task_running:
-            self.app_ref.stop_sequence_event.set()
+            self.stop_sequence_flag.set()
             self.app_ref.gui_queue.put(('scheduler_log', "Señal de detención enviada... Finalizando tarea actual.\n", "orange"))
             
             
