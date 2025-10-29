@@ -6,11 +6,14 @@ from tkinter import filedialog
 import threading
 import  subprocess
 from datetime import datetime, timezone
+
 from logic import db_handler
 import time
 import sys
-
+import csv
 import logic.robot_executor as robot_executor
+
+
 
 class SchedulerController:
     def __init__(self, app_ref):
@@ -19,7 +22,8 @@ class SchedulerController:
         self.current_task_index = -1
         self.stop_sequence_flag = threading.Event()
         self.task_output_files = [] # Para guardar los output.xml
-        
+        self.verification_report_file = None
+        self.current_db_path = None
         
         
     def _on_task_type_change(self, selected_type):
@@ -37,7 +41,11 @@ class SchedulerController:
         # Variables entrada
         self.app_ref.task_vars_label.grid_forget()
         self.app_ref.task_vars_entry.grid_forget()
-
+        
+        # Ocultar widgets OID
+        self.app_ref.task_oid_label.grid_forget()
+        self.app_ref.task_oid_entry.grid_forget()
+        
         # Advertencia SNMP
         self.app_ref.snmp_warning_label.grid_forget()
 
@@ -71,8 +79,11 @@ class SchedulerController:
             self.app_ref.task_param_entry.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
 
         elif selected_type == "Verificar Traps SNMP Nuevos":
+            # Warning Monitoreo
             self.app_ref.snmp_warning_label.grid(row=2, column=0, columnspan=2, padx=10, pady=5, sticky="w")
-
+            #  OID
+            self.app_ref.task_oid_label.grid(row=3, column=0, padx=10, pady=5, sticky="w")
+            self.app_ref.task_oid_entry.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
 
         
 
@@ -185,9 +196,16 @@ class SchedulerController:
 
 
         elif task_type == "Verificar Traps SNMP Nuevos":
-            task_details['param'] = None
-            task_details['name'] = "Capturar Traps SNMP De la Secuencia"
-
+            oid_to_verify = self.app_ref.task_oid_entry.get().strip()
+            if not oid_to_verify:
+                task_details['param'] = None
+                task_details['name'] = "Verificar Traps SNMP Nuevos"
+            else:
+                # Si se especifica OID, la tarea es verificar el OID sin más!
+                task_details['param'] = oid_to_verify
+                task_details['name'] = f"Verificar Trap (OID: {oid_to_verify})"
+            
+        # Añadimos la tarea a la secuencia una vez rellenado sus detalles
         self.app_ref.task_sequence.append(task_details)
         self.app_ref.update_task_sequence_display()
         
@@ -195,6 +213,7 @@ class SchedulerController:
         # Limpiamos los campos después de añadir
         self.app_ref.task_vars_entry.delete(0, 'end')
         self.app_ref.task_param_entry.delete(0, 'end')
+        self.app_ref.task_oid_entry.delete(0, 'end')
         self.app_ref.task_test_combo.set("")
         self.app_ref.task_args_display_label.configure(text="")
         
@@ -289,6 +308,10 @@ class SchedulerController:
         except Exception as e:
             self.app_ref.gui_queue.put(('main_status', f"Error al cargar el perfil: {e}", "red"))        
 
+
+
+
+
     def _run_task_sequence_thread(self):
         """Inicia la ejecución de la secuencia de tareas en un hilo separado."""
         if self.app_ref.is_main_task_running:
@@ -304,17 +327,41 @@ class SchedulerController:
                 msg = f"Error: La Sesión {session_id} no está conectada.\n"
                 self.app_ref.gui_queue.put(('scheduler_log', msg, "red"))
                 return
+            
         # Preparamos antes de la ejecución
         self.app_ref.is_main_task_running = True
         self.stop_sequence_flag.clear()
         self.task_output_files = [] # Limpiar lista de outputs.xml
         self.current_task_index = -1
         # Deshabilitamos botones para no interferir pasando el estado "is_running"
-        # self.app_ref.run_button_state(is_running=True)    # Mejor pasarlo a la cola y no llamar a una función de app_ref desde un controlador... ->
+        # self.app_ref.run_button_state(is_running=True)    # Mejor pasarlo a la cola y no llamar a una función de app_ref desde un controlador.. ->
         # ->
         self.app_ref.gui_queue.put(('enable_buttons', None)) # Actualiza estado de botones
         self.app_ref.gui_queue.put(('scheduler_log', "▶️ Iniciando secuencia...\n", "cyan"))
         
+        
+        try:
+            history_dir = "trap_history"
+            os.makedirs(history_dir, exist_ok=True)
+            
+            history_name = self.app_ref.scheduler_history_name_entry.get()
+            if not history_name:
+                history_name = f"traps_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            self.current_db_path = os.path.join(history_dir, f"{history_name}.db")
+            
+            db_handler.initialize_database(self.current_db_path)
+            self.app_ref.gui_queue.put(('scheduler_log', f"  Historial de traps (.db) inicializado en: {self.current_db_path}\n", "gray"))
+        except Exception as e:
+            self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error al inicializar historial DB: {e}\n", "orange"))
+            self.current_db_path = None
+
+        try:
+            self._initialize_verification_report()
+            self.app_ref.gui_queue.put(('scheduler_log', f"  Informe de verificación (.csv) inicializado.\n", "gray"))
+        except Exception as e:
+            self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error al inicializar informe CSV: {e}\n", "orange"))
+            self.verification_report_file = None
+
         # Ejecutamos el hilo 
         threading.Thread(target=self._execute_next_task, daemon=True).start()
         
@@ -332,19 +379,19 @@ class SchedulerController:
         """
         
         # *** CONDICIONES DE PARADA (depende de lo que se asignó y lo que pasó en el bucle anterior) ***
-        # 1. Si la secuencia falló y la tarea anterior debía detenerla
+        # Si la secuencia falló y la tarea anterior tenia que detenerla
         if sequence_failed:
             self.app_ref.gui_queue.put(('scheduler_log', "Secuencia detenida debido a un error.\n", "red"))
             self._consolidate_reports(sequence_failed=True)
-            return # Termina el hilo
+            return # Terminamos el hilo
 
-        # 2. Si se presionó el botón de Stop
+        # Si se presionó el botón de Stop
         if self.stop_sequence_flag.is_set():
             self.app_ref.gui_queue.put(('scheduler_log', "⏹️ Secuencia detenida por el usuario.\n", "orange"))
             self._consolidate_reports(sequence_failed=True) # Consideramos 'fallida' si se detiene
             return # Termina el hilo
 
-        # 3. Si hemos completado todas las tareas :)
+        # Si hemos completado todas las tareas :)
         self.current_task_index += 1    # Recordemos que el indice estaba inicializado a -1! 
         if self.current_task_index >= len(self.app_ref.task_sequence):
             self.app_ref.gui_queue.put(('scheduler_log', "✅ Secuencia completada.\n", "green"))
@@ -362,6 +409,9 @@ class SchedulerController:
         self.app_ref.gui_queue.put(('scheduler_log', log_msg, "white"))
 
         # *** LOGIC***
+        oid_to_check = None 
+        verification_result = "N/A"
+        found_evidence = []
         # Inicializamos las variables antes de comenzar a ejecutar la tarea
         task_failed = False
         result_code = 0 # (PASS)        
@@ -420,212 +470,96 @@ class SchedulerController:
             elif task['type'] == "Verificar Traps SNMP Nuevos":
                 if not self.app_ref.trap_listener_controller.is_listener_running():
                      raise RuntimeError("El Listener SNMP no está iniciado.")
-                     
-                new_traps_found = self.app_ref.trap_listener_controller.check_and_clear_new_traps()
                 
-                if not new_traps_found:
-                    self.app_ref.gui_queue.put(('scheduler_log', "❌ FALLÓ: No se recibieron nuevos traps SNMP.\n", "red"))
-                    task_failed = True
+                # Aquí recuperamos el OID que guardamos.
+                oid_to_check = task['param'] 
+                
+                if oid_to_check:
+                    self.app_ref.gui_queue.put(('scheduler_log', f" Buscando trap específico con OID: {oid_to_check}...\n", "gray"))
                 else:
-                     self.app_ref.gui_queue.put(('scheduler_log', "✅ ÉXITO: Se recibieron nuevos traps SNMP.\n", "green"))
+                    self.app_ref.gui_queue.put(('scheduler_log', " Buscando traps nuevos (genérico)...\n", "gray"))
+
+                # Llamada a check_and_clear_new_traps. Nos devuelve en "success": '1' si le llegaron traps. '0' si no llegaron. En "found_traps" nos devolvera todos los traps encontrados en caso de no haber proporcionado un OID. 
+                # En caso de proporcionar un OID nos devolverá el trap que coincide con el del OID.
+                verification_success, found_evidence = self.app_ref.trap_listener_controller.check_and_clear_new_traps(oid_to_check)
+
+                # Si encontramos traps Y tenemos una DB abierta, los guardamos
+                if found_evidence and self.current_db_path:
+                    try:
+                        db_handler.save_traps_to_db(self.app_ref, found_evidence, self.current_db_path)
+                        self.app_ref.gui_queue.put(('scheduler_log', f"  {len(found_evidence)} traps guardados en {os.path.basename(self.current_db_path)}.\n", "gray"))
+                    except Exception as e:
+                        self.app_ref.gui_queue.put(('scheduler_log', f"  Error guardando traps en DB: {e}\n", "orange"))
+
+                if not verification_success:
+                    msg = f"FALLÓ: No se recibieron traps"
+                    if oid_to_check:    # Si no se encuentran traps, pero nos habían pasado un OID
+                        msg += f" con OID {oid_to_check}.\n"
+                    else: # Si no se encuentran traps y tampoco nos pasaban OID
+                        msg += " nuevos.\n"
+                    self.app_ref.gui_queue.put(('scheduler_log', f"❌ {msg}", "red"))
+                    task_failed = True
+                    verification_result = "FAILED"
+                else:
+                    msg = f"ÉXITO: Se recibieron traps"
+                    if oid_to_check:
+                        msg += f" (verificado OID {oid_to_check}).\n" # (Esto es una suposición)
+                    else:
+                        msg += " nuevos.\n"
+                    verification_result = "VERIFIED"
+                
+                
 
         except Exception as e:
             self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error fatal en la tarea: {e}\n", "red"))
             task_failed = True
-
+            verification_result = "ERROR"
         
+        
+        if task['type'] == "Verificar Traps SNMP Nuevos":
+            self._log_verification_result(task['name'], oid_to_check, verification_result, found_evidence)
+            
         # *** Decidir si continuar ***
         should_stop = task_failed and (task['on_fail'] == "Detener secuencia")  # Solo pararemos la secuencia en el caso de que el test que haya fallado tenga asignado en el on_fail que así sea
         
         # Llamada recursiva para la siguiente tarea
         self._execute_next_task(sequence_failed=should_stop)           
-        
-        
-         
-    # def _execute_task_sequence(self):
-    #     """
-    #     Ejecución de la secuencia de tareas.
-    #     Este método se ejecuta en un hilo secundario.
-    #     """
-    #     try:
-    #         active_id = self.app_ref.active_session_id
-    #         if not self.app_ref.sessions[active_id]['process']:
-    #             raise Exception(f"Sesión {active_id} no está conectada.")
-    #     except Exception as e:
-    #         self.app_ref.gui_queue.put(('scheduler_log', f"Error: {e}", "red"))
-    #         self.app_ref.gui_queue.put(('enable_buttons', None))
-    #         return
-        
-        
-    #     self.app_ref.is_main_task_running = True
-        
-    #     sequence_failed = False
-    #     xml_files = []
 
-    #     try:
-    #         # 1. Crear el directorio para los historiales si no existe
-    #         history_dir = "trap_history"
-    #         os.makedirs(history_dir, exist_ok=True)
-            
-    #         # 2. Obtener el nombre del archivo desde la GUI
-    #         history_name = self.app_ref.scheduler_history_name_entry.get()
-    #         if not history_name:
-    #             # Si está vacío, generar un nombre por defecto con fecha y hora
-    #             history_name = f"traps_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                
-    #         # 3. Construir la ruta completa y crear la BD para esta sesión
-    #         current_db_path = os.path.join(history_dir, f"{history_name}.db")
-    #         db_handler.initialize_database(current_db_path) # Inicializamos la nueva BD
-                
-    #         if not hasattr(self.app_ref, 'task_sequence') or not self.app_ref.task_sequence:
-    #             self.app_ref.gui_queue.put(('main_status', "Error: No hay tareas en la secuencia.", "red"))
-    #             return
-
-    #         self.app_ref.gui_queue.put(('scheduler_log', f"--- Iniciando secuencia de tareas. Traps se guardarán en: {current_db_path} ---\n", "white"))
-
-    #         timestamp_before_task = datetime.now(timezone.utc).isoformat() # Timestamp inicial
-
-    #         for i, task in enumerate(self.app_ref.task_sequence):
-    #             # Comprobar si se ha solicitado detener la secuencia
-    #             if self.app_ref.stop_sequence_event.is_set():
-    #                 self.app_ref.gui_queue.put(('scheduler_log', "Secuencia detenida por el usuario.\n", "orange"))
-    #                 break
-
-    #             task_name = task.get('name', f"Tarea {i+1}")
-    #             self.app_ref.gui_queue.put(('scheduler_log', f"▶ Ejecutando Tarea [{i+1}/{len(self.app_ref.task_sequence)}]: {task_name}\n", "cyan"))
-                
-    #             task_result = 0 # 0 = PASS, otro valor = FAIL
-                
-    #             # ----------- PROCESAR TIPO DE TAREA -----------
-    #             if task['type'] == 'robot_test':
-    #                 output_file = f"output_task_{i}.xml"
-    #                 output_file_path = os.path.join("test_results", output_file) # Guardamos el path del fichero xml correspondiente a este test para poder especificarlo mas tarde en codigo error (en caso de que el test falle)
-    #                 timestamp_before_task = datetime.now(timezone.utc).isoformat()
-    #                 # ***************************************************************************************************************************
-
-    #                 # Comprobamos si este test tiene una acción de GUI asociada
-    #                 gui_update_info = self.app_ref.test_gui_update_map.get(task['test_name'])  # Recordemos que "task" era un diccionario que tenía la clave "test_name"
-    #                 success_callback = None # Por defecto, no hay callback
-
-    #                 if gui_update_info:
-    #                     message_type, attr_names = gui_update_info
-    #                     # ************************************************************************************************************
-    #                     # Llamamos directamente al método reutilizable que ya existe en la clase
-    #                     success_callback = self.app_ref._create_gui_update_callback(active_id, message_type, attr_names)
-    #                     # ************************************************************************************************************
-
-    #                 # 2. Pasar el callback (o None si no hay) a la función de ejecución
-    #                 task_result = robot_executor._run_robot_test(
-    #                     self.app_ref,
-    #                     test_name=task['test_name'],
-    #                     session_id=active_id,
-    #                     variables=task.get('variables', []),
-    #                     preferred_filename=task.get('filename'),
-    #                     output_filename=output_file,
-    #                     suppress_gui_updates=True,
-    #                     on_success=success_callback  # <--  Si no se crea ningún callback especial para este test, el valor de success_callback será None y no se ejecutará nada extra.
-    #                 )
-                    
-    #                 if os.path.exists(output_file_path):
-    #                     xml_files.append(output_file_path)  # Guardamos el XML para el informe consolidado si se generó el archivo en el path guardado
-    #                 else:
-    #                     self.app_ref.gui_queue.put(('scheduler_log', f"⚠️  No se generó archivo de salida para '{task['name']}'.\n", "orange"))
-
-    #             elif task['type'] == 'delay':
-    #                 delay_seconds = int(task.get('duration', 5))
-    #                 self.app_ref.gui_queue.put(('scheduler_log', f"  Pausando durante {delay_seconds} segundos...\n", "gray"))
-                    
-    #                 # Hacemos una pausa interrumpible
-    #                 for _ in range(delay_seconds):
-    #                     if self.app_ref.stop_sequence_event.is_set():
-    #                         break
-    #                     time.sleep(1)
-
-    #             elif task['type'] == 'check_snmp_traps':
-    #                 self.app_ref.gui_queue.put(('scheduler_log', "  Buscando nuevos traps SNMP...\n", "gray"))
-    #                 new_traps = self.app_ref.trap_receiver.get_traps_since(timestamp_before_task)
-                    
-    #                 if new_traps:
-    #                     self.app_ref.gui_queue.put(('scheduler_log', f"  ✔ Encontrados {len(new_traps)} traps nuevos.\n", "green"))
-    #                     db_handler.save_traps_to_db(self.app_ref, new_traps, current_db_path)
-    #                 else:
-    #                     self.app_ref.gui_queue.put(('scheduler_log', "  - No se encontraron traps nuevos.\n", "gray"))
-                    
-    #                 # Actualizamos el timestamp para la siguiente tarea
-    #                 timestamp_before_task = datetime.now(timezone.utc).isoformat()
-
-    #             # ----------- MANEJAR RESULTADO DE LA TAREA -----------
-    #             if task_result != 0:
-    #                 self.app_ref.gui_queue.put(('scheduler_log', f"❌ Tarea '{task_name}' ha fallado.\n", "red"))
-    #                 sequence_failed = True
-    #                 if task.get('on_fail') == 'stop':
-    #                     self.app_ref.gui_queue.put(('scheduler_log', "Política 'on_fail: stop'. Deteniendo la secuencia.\n", "red"))
-    #                     break
-    #             else:
-    #                 self.app_ref.gui_queue.put(('scheduler_log', f"✔ Tarea '{task_name}' completada.\n", "green"))
-                    
-    #         # ----------- FINAL DE LA SECUENCIA -----------
-    #     finally:
-    #         self.app_ref.gui_queue.put(('scheduler_log', "--- Secuencia de tareas finalizada ---\n", "white"))
-
-    #         # Generar informe consolidado si se ejecutaron tests
-    #         if xml_files:
-    #             self.app_ref.gui_queue.put(('scheduler_log', "Generando informe consolidado...\n", "gray"))
-    #             try:
-    #             # ***************************************************************************************************************************
-    #             #  CORRECCIÓN: YA NO HAREMOS USO DE ESTO, SINO DE SUBPROCESS para llamar a rebot --- EN UN PROCESO A PARTE DEL DE LA GUI
-    #             #     rebot_cli(['--name', 'Informe de Secuencia', 
-    #             #             '--outputdir', 'test_results',
-    #             #             '--log', 'log_consolidado.html',
-    #             #             '--report', 'report_consolidado.html'] + xml_files)
-    #             #     app_ref.gui_queue.put(('scheduler_log', "✔ Informe consolidado 'report_consolidado.html' creado.\n", "green"))
-    #             # except Exception as e:
-    #             #     app_ref.gui_queue.put(('scheduler_log', f"❌ Error al generar informe consolidado: {e}\n", "red"))
-    #             # ***************************************************************************************************************************
-
-    #         # Construir el comando para ejecutar rebot. Lo hacemos creando un proceso completamente separado para generar el informe. De esta forma si rebot falla no afecta a la app principal (GUI). Tambien podemos determinal un Timeout, asi la GUI no se puede quedar congelada.
-    #                 command = [
-    #                     sys.executable,  # Usa el mismo python que ejecuta la app
-    #                     "-m", "robot.rebot",
-    #                     "--name", "Informe de Secuencia",
-    #                     "--outputdir", "test_results",
-    #                     "--log", "log_consolidado.html",
-    #                     "--report", "report_consolidado.html"
-    #                 ] + xml_files
-
-    #                 # Ejecutar el comando como un subproceso con un tiempo de espera
-    #                 result = subprocess.run(
-    #                     command, 
-    #                     capture_output=True, 
-    #                     text=True, 
-    #                     timeout=30  # Espera un máximo de 30 segundos
-    #                 )
-
-    #                 if result.returncode == 0:
-    #                     self.app_ref.gui_queue.put(('scheduler_log', "✔ Informe consolidado creado.\n", "green"))
-    #                 else:
-    #                     # Si rebot falla, muestra el error
-    #                     error_output = result.stderr or result.stdout
-    #                     self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error al generar informe: {error_output}\n", "red"))
-
-    #             except subprocess.TimeoutExpired:
-    #                 self.app_ref.gui_queue.put(('scheduler_log', "❌ Error: La generación del informe tardó demasiado (timeout).\n", "red"))
-
-    #             except Exception as e:
-    #                 self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error inesperado al generar informe: {e}\n", "red"))
-
-    #         # Restaurar GUI
-    #         final_message = "Secuencia completada con errores." if sequence_failed else "Secuencia completada con éxito."
-    #         final_color = "red" if sequence_failed else "green"
-    #         self.app_ref.gui_queue.put(('main_status', final_message, final_color))
-            
-    #         self.app_ref.gui_queue.put(('enable_buttons', None)) # Rehabilitamos botones
-            
-
-    #         self.app_ref.is_main_task_running = False
-    #         self.app_ref.gui_queue.put(('enable_buttons', None))
-                
     
+    def _initialize_verification_report(self):
+        """Crea o sobrescribe el CSV de verificación y escribe la cabecera."""
+        report_dir = "test_results"
+        self.verification_report_file = os.path.join(report_dir, "verification_report.csv")
+
+        # Nos aseguramos de que el directorio existe
+        os.makedirs(report_dir, exist_ok=True)
+        
+        with open(self.verification_report_file, 'w', newline='', encoding='utf-8') as f:   # usamos 'w' para sobrescribir el archivo en cada nueva ejecución
+            writer = csv.writer(f)
+            writer.writerow(["Timestamp", "TaskName", "ExpectedOID", "Result", "Evidence"]) # Inicalizamos el CSV con los siguientes campos
+
+
+
+    def _log_verification_result(self, task_name, oid, result, evidence_list): 
+        if not self.verification_report_file:
+            return # No hacemos nada si no hay archivo inicializado.
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        evidence_str = ""
+        
+        try:            
+            # Convertir la lista de traps ("Evidence") a un string JSON para que sea mas facil de leer
+            evidence_str = json.dumps(evidence_list)
+        except Exception:
+            evidence_str = str(evidence_list)
+            
+        try:
+            with open(self.verification_report_file, 'a', newline='', encoding='utf-8') as f:   # Usamos 'a' para añadirla al final del archivo
+                writer = csv.writer(f)
+                writer.writerow([timestamp, task_name, str(oid) if oid else "N/A", result, evidence_str])
+        except Exception as e:
+            self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error al escribir en el informe CSV: {e}\n", "red"))
+
 
     def _consolidate_reports(self, sequence_failed):
         """
@@ -678,10 +612,15 @@ class SchedulerController:
         final_color = "red" if sequence_failed else "green"
         self.app_ref.gui_queue.put(('main_status', final_message, final_color))
         
+        
+        
+        if self.verification_report_file:   # Comprobamos que el CSV exista
+            self.app_ref.gui_queue.put(('scheduler_log', f"✔ Informe de verificación guardado en: {self.verification_report_file}\n", "green"))
+        
         self.app_ref.gui_queue.put(('enable_buttons', None)) # Rehabilitamos botones
         self.app_ref.is_main_task_running = False
         self.stop_sequence_flag.clear()
         self.current_task_index = -1    # Volvemos a inicializar la variable indice de las tareas
         self.task_output_files = []
-
-
+        
+        self.current_db_path = None

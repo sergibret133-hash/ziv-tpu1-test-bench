@@ -1,9 +1,6 @@
 import customtkinter as ctk
-
-
-
-
-
+import json
+import os
 
 def create_monitoring_tab(app_ref):
     """Crea y devuelve el CTkTabView completo para la sección 'MONITORING'."""
@@ -14,13 +11,15 @@ def create_monitoring_tab(app_ref):
     tab_view.add("Chronological Register")
     tab_view.add("Historial de Traps (BD)")
     tab_view.add("Correlación de Eventos")
-    
+    tab_view.add("Informe Verificación")
     
     # 2. Delegar el rellenado de cada sub-pestaña a su función correspondiente
     _populate_snmp_tab(app_ref, tab_view.tab("SNMP"))
     _populate_chrono_register_tab(app_ref, tab_view.tab("Chronological Register"))
     _populate_db_viewer_tab(app_ref, tab_view.tab("Historial de Traps (BD)"))
     _populate_event_correlation_tab(app_ref, tab_view.tab("Correlación de Eventos"))
+    _populate_verification_report_tab(app_ref, tab_view.tab("Informe Verificación"))
+    
     # 3. Devolver el TabView ya construido y rellenado
     return tab_view
 
@@ -513,7 +512,7 @@ def _populate_event_correlation_tab(app_ref, tab_frame):
     )
     app_ref.correlation_button.pack(fill="x", padx=5, pady=5)
 
-    # --- 2. Frame de Resultados (Visores) ---
+    # *** Frame de Resultados (Visores) ***
     results_frame = ctk.CTkFrame(tab_frame, fg_color="transparent")
     results_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
     results_frame.grid_columnconfigure((0, 1), weight=1)
@@ -529,7 +528,7 @@ def _populate_event_correlation_tab(app_ref, tab_frame):
     app_ref.corr_snmp_textbox = ctk.CTkTextbox(results_frame, state="disabled", wrap="word")
     app_ref.corr_snmp_textbox.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
 
-    # --- 3. Veredicto Final ---
+    # *** Veredicto Final ***
     app_ref.corr_result_label = ctk.CTkLabel(results_frame, text="Resultado: PENDIENTE", font=ctk.CTkFont(size=16, weight="bold"), text_color="gray")
     app_ref.corr_result_label.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
     
@@ -550,3 +549,48 @@ def _update_correlation_display(app_ref, chrono_report, trap_report, result, col
     app_ref.corr_snmp_textbox.delete("1.0", "end")
     app_ref.corr_snmp_textbox.insert("1.0", trap_report)
     app_ref.corr_snmp_textbox.configure(state="disabled")
+    
+    
+    
+    # ******************* Pestaña Visualizador de Reports Verificación de Traps SNMP *******************
+
+def _populate_verification_report_tab(app_ref, tab_frame):
+    """Crea los widgets para el visor del informe de verificación (CSV)."""
+    tab_frame.grid_columnconfigure(0, weight=1)
+    tab_frame.grid_rowconfigure(2, weight=1)
+
+    # Botón para cargar el archivo CSV
+    load_button = ctk.CTkButton(
+        tab_frame, 
+        text="Cargar Informe de Verificación (.csv)...", 
+        command=app_ref.monitoring_controller._load_verification_report
+    )
+    load_button.grid(row=0, column=0, padx=20, pady=10, sticky="ew")
+
+    # Etiqueta para mostrar el archivo actual
+    app_ref.verification_report_file_label = ctk.CTkLabel(
+        tab_frame, 
+        text="Ningún informe cargado.", 
+        font=ctk.CTkFont(size=12, slant="italic")
+    )
+    app_ref.verification_report_file_label.grid(row=1, column=0, padx=20, pady=(0, 5), sticky="w")
+    
+    # Campo de texto para mostrar el informe formateado
+    app_ref.verification_report_display = ctk.CTkTextbox(tab_frame, state="disabled", wrap="word")
+    app_ref.verification_report_display.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="nsew")
+
+def _update_verification_report_display(app_ref, formatted_text, filepath):
+        """Actualiza el visor del informe de verificación."""
+        
+        # Actualizar la etiqueta con el nombre del archivo
+        filename = os.path.basename(filepath) if filepath else "Ningún informe cargado."
+        app_ref.verification_report_file_label.configure(text=f"Mostrando: {filename}")
+
+        # Actualizar el cuadro de texto
+        app_ref.verification_report_display.configure(state="normal")
+        app_ref.verification_report_display.delete("1.0", "end")
+        if not formatted_text:
+            app_ref.verification_report_display.insert("1.0", "El informe está vacío o no se pudo cargar.")
+        else:
+            app_ref.verification_report_display.insert("1.0", formatted_text)
+        app_ref.verification_report_display.configure(state="disabled")

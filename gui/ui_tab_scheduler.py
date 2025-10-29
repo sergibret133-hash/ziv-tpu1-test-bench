@@ -37,6 +37,11 @@ def create_scheduler_tab(app_ref):
         organized_test_list = ["No se encontraron tests"]
     app_ref.task_test_combo = ctk.CTkComboBox(creator_frame, values=organized_test_list, command=app_ref.scheduler_controller._on_test_selection_change)
     
+    # Widget OID
+    app_ref.task_oid_label = ctk.CTkLabel(creator_frame, text="OID a verificar:")
+    app_ref.task_oid_entry = ctk.CTkEntry(creator_frame, placeholder_text="Ej: 1.3.6.1.4.1.x.x")
+    
+    
     # Widget dinámico: Variables del test
     app_ref.task_vars_label = ctk.CTkLabel(creator_frame, text="Variables:")
     app_ref.task_vars_entry = ctk.CTkEntry(creator_frame, placeholder_text="VAR1:valor1 VAR2:valor2")

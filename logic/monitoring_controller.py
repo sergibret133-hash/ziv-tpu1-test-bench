@@ -8,6 +8,9 @@ from tkinter import filedialog, messagebox
 import time
 import re
 
+import csv
+import os
+
 class MonitoringController:
     def __init__(self, app_ref):
         self.app_ref = app_ref
@@ -442,3 +445,81 @@ class MonitoringController:
         self.app_ref.gui_queue.put(
             ('update_correlation_display', chrono_text, trap_text, result, color)
         )
+        
+        
+    # Visualizador de Reports Verificación Traps SNMP
+    def _load_verification_report(self):
+        """ Abre el diálogo para seleccionar el .csv y lo muestra """
+        filepath = filedialog.askopenfilename(
+            title="Seleccionar Informe de Verificación",
+            initialdir="test_results",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*")),
+            initialfile="verification_report.csv" 
+        )
+        if not filepath:
+            return  # Usuario cancela
+        
+        try:
+            formatted_text = self._parse_and_format_csv(filepath)
+            # Enviamos el texto formatado y la ruta a la GUI a través de la cola
+            self.app_ref.gui_queue.put(('update_verification_report_display', self.app_ref.active_session_id, formatted_text, filepath))
+            self.app_ref.gui_queue.put(('main_status', f"Informe '{os.path.basename(filepath)}' cargado.", "white"))
+        except Exception as e:
+            error_msg = f"Error al leer el informe CSV: {e}"
+            self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
+            # Enviamos mensaje de error al visor
+            self.app_ref.gui_queue.put(('update_verification_report_display', self.app_ref.active_session_id, error_msg, filepath))
+
+    def _parse_and_format_csv(self, filepath):
+        """Lee el archivo CSV y lo formatea como un string legible."""
+        output_text = []
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                
+                # Omitir la cabecera
+                try:
+                    header = next(reader)
+                    output_text.append(f"Informe: {os.path.basename(filepath)}\n")
+                    output_text.append("=" * (len(header[0]) + 10))     #, crea una cadena de signos "=" que es 10 caracteres más larga que esa palabra (la del primer elemento del header ("timestamp"))
+                except StopIteration:   # Si por algun motivo no encontrara el primer elemento de la cabecera , indicamos que el archivo está vacio gracias al try que hemos realizado.
+                    return "Informe vacío." # Archivo vacío
+
+                # Leer cada fila de datos
+                for i, row in enumerate(reader):
+                    if len(row) < 5: continue # Ignorar filas malformadas, comprobando que haya un numero de caracterres superior a 5
+
+                    timestamp, task_name, expected_oid, result, evidence_str = row  # Asignamos todas las variables que row de la linea leida del csv contiene
+                    
+                    output_text.append(f"\n*** REGISTRO #{i+1} ---")
+                    output_text.append(f"Timestamp: {timestamp}")
+                    output_text.append(f"Tarea: {task_name}")
+                    output_text.append(f"OID Esperado: {expected_oid}")
+                    
+                    # Damos color al resultado
+                    result_prefix = "✅" if result == "VERIFIED" else "❌"
+                    output_text.append(f"Resultado: {result_prefix} {result}")
+
+                    # Damos formato a la evidencia (el trap) (recordemos que esta en JSON)
+                    output_text.append("Evidencia:")
+                    if evidence_str:
+                        try:
+                            # Cargamos el JSON y lo volcamos con indentación
+                            evidence_data = json.loads(evidence_str)
+                            formatted_evidence = json.dumps(evidence_data, indent=2, ensure_ascii=False)   # Guardamos en formatted_evidence todo el contenido del archivo json con el trap. Para que nos vaya separando las claves, diccionarios en diferentes filas, hacemos indent=2 para que sea más legible
+                            # Añadimos una sangría a la evidencia. Para que no este a la misma "altura" que la cabecera.
+                            for line in formatted_evidence.split('\n'): # formatted_evidence tiene \n, PERO TODO ESTA EN LA MISMA CADENA DE TEXTO. Lo que hacemos es separar cada linea (con split('\n)) ->
+                                output_text.append(f"  {line}")     # ->  y a cada linea LE APLICAMOS UNA SEPARACION DE ESPACIOS CON f" {line}". De esta manera vamos añadiendo str a output_text con una separación tabulada respecto al titulo inciial "Evidencia"
+                                 
+                        except json.JSONDecodeError:
+                            # Si no es JSON (porque nos llegara un trap simple p ej), mostrarlo tal cual
+                            output_text.append(f"  {evidence_str}")
+                    else:
+                        output_text.append("  (Ninguna)")
+                        
+        except FileNotFoundError:
+            return f"Error: No se encontró el archivo en {filepath}"
+        except Exception as e:
+            return f"Error al parsear el archivo CSV: {e}"
+
+        return "\n".join(output_text)

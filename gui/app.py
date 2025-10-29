@@ -11,7 +11,7 @@ import re
 import json
 import socket
 import queue
-import time # Importado para pequeñas pausas
+import time
 from pathlib import Path
 from robot.api import TestSuiteBuilder
 import time
@@ -55,7 +55,7 @@ class ModernTestRunnerApp(ctk.CTk):
         super().__init__()
 
         # ******* 1. INICIALIZACIÓN DE LA VENTANA PRINCIPAL *******
-        self.title("Teleprotection Test Interface")
+        self.title("ZIV TPU-1 Test Bench")
         self.geometry("1100x850") 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -69,6 +69,8 @@ class ModernTestRunnerApp(ctk.CTk):
 
 
         self.is_main_task_running = False    # Para indicar al hilo que hace pull para comprobar alarmas si hay algun otro test ejecutandose y así no interferir.
+        
+        self.is_snmp_listener_running = False   # Flag para el estado del listener
 
         self.trap_receiver = Trap_Receiver_GUI_oriented()
         self.snmp_listener_thread = None
@@ -259,6 +261,9 @@ class ModernTestRunnerApp(ctk.CTk):
         self.task_widgets = [] # Para guardar las filas de la lista visual
         self.args_frame = None
         self.task_session_selector = None
+        
+        self.task_oid_label = None
+        self.task_oid_entry = None
         
         # ********* 3. CARGA DE DATOS EXTERNOS *********
         self.tests_data = robot_executor._discover_and_load_tests(self, TEST_DIRECTORY)
@@ -462,7 +467,14 @@ class ModernTestRunnerApp(ctk.CTk):
                             # ui_tab_monitoring._update_correlation_display(self, message[2], message[3], message[4], message[5])
                             # Los datos están en message[2] en adelante...
                             ui_tab_monitoring._update_correlation_display(self, *message[2:])
+
+                    elif msg_type == 'update_verification_report_display':
+                    # message[2] = formatted_text
+                    # message[3] = filepath
+                        ui_tab_monitoring._update_verification_report_display(self, message[2], message[3])        
                             
+
+
                     elif msg_type == 'update_ibtu_fft_config':
                         # Guardamos localmente
                         fft_config_data = message[2]
