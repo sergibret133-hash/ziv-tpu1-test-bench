@@ -6,7 +6,6 @@ from gui.app import ModernTestRunnerApp
 if __name__ == "__main__":
 
     # 2. Preparamos el entorno (creamos carpetas si no existen)
-    # (Este es tu código, ¡es perfecto!)
     if not os.path.exists("test_results"):
         os.makedirs("test_results")
     if not os.path.exists("scheduler_profiles"):

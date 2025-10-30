@@ -39,66 +39,113 @@ def _populate_snmp_tab(app_ref, tab_frame):
 
 
 def _populate_snmp_receiver_tab(app_ref, tab_frame):
-    """Populates the SNMP Receiver sub-tab with its widgets."""
+    """Populates the SNMP Receiver sub-tab with session selection."""
     tab_frame.grid_columnconfigure(0, weight=1)
     tab_frame.grid_rowconfigure(1, weight=1)
 
-    config_frame = ctk.CTkFrame(tab_frame)
-    config_frame.grid(row=0, column=0, padx=20, pady=10, sticky="ew")
-    config_frame.grid_columnconfigure(1, weight=1)
+    # Selector de Session
+    selector_frame = ctk.CTkFrame(tab_frame, fg_color="transparent")
+    selector_frame.grid(row=0, column=0, padx=20, pady=(10, 5), sticky="ew")
+    ctk.CTkLabel(selector_frame, text="Configurar Receptor de Traps para:").pack(side="left", padx=(0, 10))
 
-    ctk.CTkLabel(config_frame, text="Dirección IP del Listener:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+
+    app_ref.listener_selector = ctk.CTkSegmentedButton(
+        selector_frame,
+        values=["Sesión A", "Sesión B"],
+        command=lambda value: _switch_listener_view(app_ref, value.split(" ")[-1])  # De lo values declarados (Sesión A y Sesión B), nos quedamos solo con la letra de la sesión! A o B
+    )
+
+    app_ref.listener_selector.pack(fill="x", expand=True)
+    app_ref.listener_selector.set("Sesión A")   # Por defecto seleccionamos la Sesión A
+
+
+    # Contenedor para los widgets de cada sesión
+    app_ref.listener_widget_container = ctk.CTkFrame(tab_frame, fg_color="transparent")
+    app_ref.listener_widget_container.grid(row=1, column=0, sticky="nsew")
+    app_ref.listener_widget_container.grid_columnconfigure(0, weight=1)
+    app_ref.listener_widget_container.grid_rowconfigure(0, weight=1)
+
+    for session_id in ['A', 'B']:
+        listener_info = app_ref.trap_listeners[session_id]
+
+        # Frame principal de la sesion que estamos iterando
+        session_frame = ctk.CTkFrame(app_ref.listener_widget_container, fg_color="transparent")
+        session_frame.grid_columnconfigure(0, weight=1)
+        session_frame.grid_rowconfigure(1, weight=1)
+        
+        # Frame de configuracion del puerto y botones
+        config_frame = ctk.CTkFrame(session_frame)
+        config_frame.grid(row=0, column=0, padx=20, pady=(5, 10), sticky="ew")
+        config_frame.grid_columnconfigure(1, weight=1)
+        
+        # Puerto
+        ctk.CTkLabel(config_frame, text=f"Puerto (Sesión {session_id}):").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        port_entry = ctk.CTkEntry(config_frame, placeholder_text="171")
+        port_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+        default_port = "170" if session_id == 'A' else "171" # Puertos diferentes por defecto
+        port_entry.insert(0, default_port)
+        listener_info['port_widget'] = port_entry
+        
+        # Botones Start & Stop
+        start_button = ctk.CTkButton(config_frame, text="Iniciar Listener", command=lambda s=session_id: app_ref.trap_listener_controller._start_snmp_listener_thread(s))
+        start_button.grid(row=3, column=0, pady=10, padx=5, sticky="ew")
+        listener_info['start_button'] = start_button    # Lo guardamos dentro de la clave 'start_button' del diccionario de esta sesión
+
+        stop_button = ctk.CTkButton(config_frame, text="Detener Listener", command=lambda s=session_id: app_ref.trap_listener_controller._stop_snmp_listener_thread(s), state="disabled")   #Por defecto lo dejamos deshabilitado el boton
+        stop_button.grid(row=3, column=1, pady=10, padx=5, sticky="ew")
+        listener_info['stop_button'] = stop_button   # Lo guardamos dentro de la clave 'stop_button' del diccionario de esta sesión
+        
+        # Etiqueta de estado
+        status_label = ctk.CTkLabel(config_frame, text="Listener: Detenido", text_color="red")
+        status_label.grid(row=4, column=0, columnspan=2, pady=(0, 5))
+        listener_info['status_label'] = status_label    # Lo guardamos dentro de la clave 'status_label' del diccionario de esta sesión
+        
+        # Visor de traps
+        trap_display = ctk.CTkTextbox(session_frame, state='disabled')
+        trap_display.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
+        listener_info['trap_display_widget'] = trap_display
+        
+        # Controles del visor de traps
+        controls_frame = ctk.CTkFrame(session_frame)
+        controls_frame.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
+        controls_frame.grid_columnconfigure((0,1,2), weight=1)
+        
+        show_all_button = ctk.CTkButton(controls_frame, text="Refrescar Traps", command=lambda s=session_id: app_ref.trap_listener_controller._show_all_traps(s))
+        show_all_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        listener_info['show_all_button'] = show_all_button
+        
+        
+        
+            # Frame para la entrada del filtro y el boton de filtrar
+        filter_frame = ctk.CTkFrame(controls_frame, fg_color="transparent")
+        filter_frame.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        filter_entry = ctk.CTkEntry(filter_frame, placeholder_text="Filtrar por texto")
+        filter_entry.pack(side="left", fill="x", expand=True, padx=(0,5))
+        listener_info['filter_entry_widget']= filter_entry
+
+        filter_button = ctk.CTkButton(filter_frame, text="Filtrar", width=60, command=lambda s=session_id: app_ref.trap_listener_controller._filter_traps(s))
+        filter_button.pack(side="left")
+        listener_info['filter_button'] = filter_button
+        
+        reset_button = ctk.CTkButton(controls_frame, text="Borrar Traps Guardados", command=lambda s=session_id: app_ref.trap_listener_controller._reset_traps(s))
+        reset_button.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
+        listener_info['reset_button'] = reset_button
+        
+        # Guardamos todo el frame de la sesión para poder ocultarlo o mostrarlo posteriormente
+        listener_info['main_frame'] = session_frame
+        
+        
+    # *** Ya hemos acabado de configurar y guardar todos los widgets de la sesion correspondiente ***
+    # MOstramos la vista inicial (sesion A)
+    _switch_listener_view(app_ref, 'A')
     
-    ip_line_frame = ctk.CTkFrame(config_frame, fg_color="transparent")
-    ip_line_frame.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
-    ip_line_frame.grid_columnconfigure(0, weight=1)
-    
-    app_ref.snmp_ip_entry = ctk.CTkEntry(ip_line_frame, placeholder_text="0.0.0.0")
-    app_ref.snmp_ip_entry.grid(row=0, column=0, sticky="ew")
-    
-    app_ref.copy_ip_button = ctk.CTkButton(ip_line_frame, text="Usar IP Local", command=app_ref._set_local_ip, width=100)
-    app_ref.copy_ip_button.grid(row=0, column=1, padx=(10, 0))
 
-    ctk.CTkLabel(config_frame, text="Puerto del Listener:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
-    app_ref.snmp_port_entry = ctk.CTkEntry(config_frame, placeholder_text="171")
-    app_ref.snmp_port_entry.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
-    app_ref.snmp_port_entry.insert(0, "171")
-    
-    app_ref.start_listener_button = ctk.CTkButton(config_frame, text="Iniciar Listener", command=app_ref.trap_listener_controller._start_snmp_listener_thread)
-    app_ref.start_listener_button.grid(row=3, column=0, pady=10, padx=5, sticky="ew")
-
-    app_ref.stop_listener_button = ctk.CTkButton(config_frame, text="Detener Listener", command=app_ref.trap_listener_controller._stop_snmp_listener_thread)
-    app_ref.stop_listener_button.grid(row=3, column=1, pady=10, padx=5, sticky="ew")
-
-    app_ref.snmp_listener_status_label = ctk.CTkLabel(config_frame, text="Listener: Detenido", text_color="red")
-    app_ref.snmp_listener_status_label.grid(row=4, column=0, columnspan=2, pady=(0, 5))
-
-    app_ref.trap_display = ctk.CTkTextbox(tab_frame, state="disabled")
-    app_ref.trap_display.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-
-    controls_frame = ctk.CTkFrame(tab_frame)
-    controls_frame.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
-    controls_frame.grid_columnconfigure((0,1,2), weight=1)
-
-    app_ref.show_all_traps_button = ctk.CTkButton(controls_frame, text="Refrescar Traps", command=app_ref.trap_listener_controller._show_all_traps)
-    app_ref.show_all_traps_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
-    
-    filter_frame = ctk.CTkFrame(controls_frame, fg_color="transparent")
-    filter_frame.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-    app_ref.snmp_filter_entry = ctk.CTkEntry(filter_frame, placeholder_text="Filtrar por texto...")
-    app_ref.snmp_filter_entry.pack(side="left", fill="x", expand=True, padx=(0,5))
-    app_ref.filter_traps_button = ctk.CTkButton(filter_frame, text="Filtrar", width=60, command=app_ref.trap_listener_controller._filter_traps)
-    app_ref.filter_traps_button.pack(side="left")
-
-    app_ref.reset_traps_button = ctk.CTkButton(controls_frame, text="Borrar Traps Almacenados", command=app_ref.trap_listener_controller._reset_traps)
-    app_ref.reset_traps_button.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
-    
-def _update_trap_display(app_ref, trap_list):
-    """Thread-safe function to update the trap display from a list of trap dicts."""
-    app_ref.trap_display.configure(state="normal")
-    app_ref.trap_display.delete("1.0", "end")
+def update_trap_display(trap_display_widget, trap_list):
+    """Thread-safe function to update a specific trap display widget."""
+    trap_display_widget.configure(state="normal")
+    trap_display_widget.delete("1.0", "end")
     if not trap_list:
-        app_ref.trap_display.insert("1.0", "No hay traps para mostrar.")
+        trap_display_widget.insert("1.0", "No hay traps para mostrar.")
     else:
         formatted_text = ""
         for i, trap in enumerate(trap_list):
@@ -111,8 +158,8 @@ def _update_trap_display(app_ref, trap_list):
                 else:
                     formatted_text += f"  {key}: {value}\n"
             formatted_text += "\n"
-        app_ref.trap_display.insert("1.0", formatted_text)
-    app_ref.trap_display.configure(state="disabled")
+        trap_display_widget.insert("1.0", formatted_text)
+    trap_display_widget.configure(state="disabled")
        
     
 # ****** DICCIONARIO DE TRAPS ******
@@ -461,9 +508,12 @@ def _toggle_snmp_config_visibility(app_ref):
     else:
         app_ref.snmp_v3_settings_frame.grid_remove()
 
-def _update_snmp_listener_status(app_ref, text, color):
-    app_ref.snmp_listener_status_label.configure(text=text, text_color=color)
-
+def _update_snmp_listener_status(app_ref, session_id, text, color):
+    listener_info = app_ref.trap_listeners.get(session_id)
+    if listener_info and listener_info.get('status_label'):
+        listener_info['status_label'].configure(text=text, text_color=color)
+    else:
+        print(f"Error: No se encontró status_label para sesión {session_id}")
 
 # ********** DB Viewer Tab **********
 
@@ -594,3 +644,17 @@ def _update_verification_report_display(app_ref, formatted_text, filepath):
         else:
             app_ref.verification_report_display.insert("1.0", formatted_text)
         app_ref.verification_report_display.configure(state="disabled")
+        
+def _switch_listener_view(app_ref, session_id):
+    """Muestra los widgets del listener para la sesión seleccionada y oculta los otros."""
+    app_ref.active_listener_view = session_id
+    for s_id, listener_info in app_ref.trap_listeners.items():  # Recorremos los dos listeners de cada una de las sesiones. s_id guarda las claves ('A' y 'B') , listener_info recorre los valores de cada clave
+        if 'main_frame' in listener_info:   # Solo actualizaremos el main frame (donde situamos todos los widgets de cada sesion) en caso de que main_frame exista en la sesión que s_id esté recorriendo
+            if s_id == session_id:  # En caso de que nos encontremos recorriendo con s_id la sesión que nos pasan por el argumento, session_id -> mostraremos el main_frame de la sesión
+                listener_info['main_frame'].grid(row=0, column=0, sticky="nsew")
+            else:   # Si el s_id que estamos recorriendo no coincide con el que nos pasa, OCULTAREMOS la main_frame de la sesión que estemos recorriendo con s_id.
+                listener_info['main_frame'].grid_forget()
+    
+    # Forzar una actualización del estado de los botones
+    app_ref.run_button_state(is_running=app_ref.is_main_task_running)
+    

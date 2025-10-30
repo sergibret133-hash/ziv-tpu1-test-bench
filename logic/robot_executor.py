@@ -14,10 +14,14 @@ from robot.api import TestSuiteBuilder
 import glob
 import socket
 import robot
-from robot.api import logger
+import logging
 
 TEST_DIRECTORY = "tests"
-
+logging.basicConfig(level=logging.DEBUG, 
+                    filename="listener_debug.log", 
+                    filemode='w', # Sobrescribe el log en cada inicio
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log = logging.getLogger("robot_listener")
 
 
 class TestOutputListener:
@@ -79,12 +83,10 @@ class TestOutputListener:
         msg_level = message.level  
         msg_text = message.message.strip()
 
-        print(f"STRIPPED MSG Content (repr): {repr(msg_text)}")
+        # log.info(f"STRIPPED MSG Content (repr): {repr(msg_text)}")
 
-
-        # --- Lógica de GUI_STATUS y GUI_ERROR (debe ir primero) ---
+        # *** Lógica de GUI_STATUS y GUI_ERROR (debe ir primero) ***
         if msg_text.startswith("GUI_ERROR:"):
-            print("DEBUG LISTENER: Matched GUI_ERROR")
             error_msg = msg_text.split(":", 1)[1].strip()
             self.app_ref.gui_queue.put(('main_status', f"Error: {error_msg}", "red"))
             return
@@ -95,7 +97,6 @@ class TestOutputListener:
             return
             
         if msg_text.startswith("GUI_ALARMS::"):
-            print("DEBUG LISTENER: Matched GUI_ALARMS")
             json_part = msg_text.split("::", 1)[1]
             try:
                 self.alarms_data = json.loads(json_part)
@@ -106,56 +107,45 @@ class TestOutputListener:
         
         
         
+        
         target_prefix = "GUI_DATA::"
         # Comprueba si el prefijo está EN CUALQUIER PARTE (más robusto)
         if target_prefix in msg_text:
-            print(f"DEBUG LISTENER: ENCONTRADO '{target_prefix}' en mensaje nivel {msg_level}: {repr(msg_text)}")
             try:
                 start_index = msg_text.find(target_prefix) + len(target_prefix)
                 json_part = msg_text[start_index:]
-                print(f"DEBUG LISTENER: Extracted JSON part: {repr(json_part)}")
+
 
                 data = json.loads(json_part)
-                print(f"DEBUG LISTENER: JSON decoded OK: {type(data)}")
-
+                
                 # Identificar y guardar
                 if isinstance(data, list) and data and isinstance(data[0], dict) and 'timestamp' in data[0] and 'alarm_event' in data[0]:
-                    print("DEBUG LISTENER: Identified as Chronological.")
                     self.chronological_log = data
-                    print(f"DEBUG LISTENER: self.chronological_log NOW IS: {self.chronological_log}")
+
 
                 elif isinstance(data, dict) and 'local_periodicity' in data and 'snr_activation' in data: # FFT
-                    print("DEBUG LISTENER: Identified as FFT.")
-                    self.ibtu_fft_data = data
-                    print(f"DEBUG LISTENER: self.ibtu_fft_data NOW IS: {self.ibtu_fft_data}")
 
-                # elif isinstance(data, dict) and 'rx_scheme' in data : # ByTones (Si usas JSON)
-                #     print("DEBUG LISTENER: Identified as ByTones.")
-                #     self.ibtu_bytones_data = data
-                #     print(f"DEBUG LISTENER: self.ibtu_bytones_data NOW IS: {self.ibtu_bytones_data}")
+                    self.ibtu_fft_data = data
 
                 else:
-                    print(f"WARN LISTENER: GUI_DATA JSON content not recognized: {data}")
+                    pass
 
             except json.JSONDecodeError as e:
                 error_msg = f"ERROR LISTENER: Error decoding GUI_DATA JSON: {e} | JSON Part: {repr(json_part)}"
-                print(error_msg)
                 self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
             except Exception as e:
                 error_msg = f"ERROR LISTENER: Unexpected error processing GUI_DATA: {e}"
-                print(error_msg)
                 self.app_ref.gui_queue.put(('main_status', error_msg, "red"))
 
-            # Hacemos return aquí porque ya procesamos el mensaje GUI_DATA
+            # Hacemos el return aquí porque ya procesamos el mensaje GUI_DATA
             return
         
         
         
         
         
-        # --- Lógica para variables normales (nivel INFO) ---
+        # *** Lógica para variables normales (nivel INFO) ***
         if message.level == 'INFO':
-            print("DEBUG LISTENER: Checking INFO variables...") # <-- Usa print()
             parsers = {
                 '${Detected_Module_List}': 'modules',
                 '${Tp1_info}': 'tp1_info',
@@ -200,19 +190,14 @@ class TestOutputListener:
             for key, attr in parsers.items():
                 # Comprobación más segura: Asegura que la clave esté al inicio y seguida de ' = '
                 if msg_text.startswith(key) and ' = ' in msg_text:
-                     # Podrías añadir una comprobación extra si quieres:
-                     # if msg_text.find(key) < msg_text.find(' = '):
-                     print(f"DEBUG LISTENER: Matched INFO variable: {key}") # Usa print
-                     try: # Añadir try-except por si _parse_and_set falla
-                         self._parse_and_set(msg_text, attr)
-                     except Exception as e:
-                          print(f"ERROR LISTENER: Failed to parse INFO var '{key}': {e}")
-                     # Una vez encontrada y parseada, podemos salir
-                     print("DEBUG LISTENER: Returning after processing INFO variable.") # Usa print
-                     return # <-- Hacemos return AQUÍ
+                    try: # Añadir try-except por si _parse_and_set falla
+                        self._parse_and_set(msg_text, attr)
+                    except Exception as e:
+                        pass
+                    # Una vez encontrada y parseada, podemos salir
+                    return      # Hacemos return AQUÍ
 
-            print("DEBUG LISTENER: No INFO variable matched.") # <-- Usa print()
-                 
+            pass
         # --- Lógica para el cronológico (nivel WARN) ---
         # elif message.level == 'WARN':
         #     if msg_text.startswith("GUI_DATA::"):
@@ -229,7 +214,7 @@ class TestOutputListener:
         
         # --- NUEVO DEBUG: Justo antes de comprobar GUI_DATA:: ---
 
-    
+        
     def _parse_and_set(self, text, attribute):
         """Helper to parse a string and set an attribute."""
         try:
@@ -240,9 +225,7 @@ class TestOutputListener:
             value_str = text.split('=', 1)[1].strip()
             setattr(self, attribute, value_str)
         except Exception as e:
-            print(f"Listener Error: Could not parse or set '{attribute}'. Details: {e}")
-
-
+            pass
 
 def _run_robot_test(app_ref, test_name, session_id, variables=None, on_success=None, on_pass_message="Test Passed!", on_fail_message="Test Failed!", preferred_filename=None, output_filename=None, log_file="log.html", report_file="report.html", suppress_gui_updates=False, block=False):
     """Generic function to run a robot test."""

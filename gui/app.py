@@ -66,14 +66,48 @@ class ModernTestRunnerApp(ctk.CTk):
             'B': {'ip': None, 'process': None, 'status': 'Desconectado', 'session_file': os.path.abspath("session_B.json")}
         }
         self.active_session_id = 'A' # 'A' o 'B'
-
-
         self.is_main_task_running = False    # Para indicar al hilo que hace pull para comprobar alarmas si hay algun otro test ejecutandose y así no interferir.
         
-        self.is_snmp_listener_running = False   # Flag para el estado del listener
+        # *** LISTENER ***
+        # self.is_snmp_listener_running = False   # Flag para el estado del listener
 
-        self.trap_receiver = Trap_Receiver_GUI_oriented()
-        self.snmp_listener_thread = None
+        # self.trap_receiver = Trap_Receiver_GUI_oriented()
+        # self.snmp_listener_thread = None
+        
+        self.trap_listeners = {
+            'A': {
+                'trap_receiver': Trap_Receiver_GUI_oriented(),
+                'listener_thread': None,
+                'is_running': False,
+                'port_widget': None, 
+                'start_button': None,
+                'stop_button': None,
+                'status_label': None,
+                'trap_display_widget': None, 
+                'filter_entry_widget': None,
+                'show_all_button': None,
+                'filter_button': None,
+                'reset_button': None,
+                'main_frame': None # Contiene todos los widgets de esta sesión
+            },
+            'B': {
+                'trap_receiver': Trap_Receiver_GUI_oriented(),
+                'listener_thread': None,
+                'is_running': False,
+                'port_widget': None,
+                'start_button': None,
+                'stop_button': None,
+                'status_label': None,
+                'trap_display_widget': None,
+                'filter_entry_widget': None,
+                'show_all_button': None,
+                'filter_button': None,
+                'reset_button': None,
+                'main_frame': None # Contiene todos los widgets de esta sesión
+            }
+        }
+        
+        self.active_listener_view = 'A' # Vista del listener que tenemos activo. Similar a "active_session_id"
         
         self.gui_queue = queue.Queue()
         
@@ -82,8 +116,6 @@ class ModernTestRunnerApp(ctk.CTk):
             'A': self._create_default_gui_data_state(),
             'B': self._create_default_gui_data_state()
         }
-        
-        
         
         
         # MAPAS DE DATOS Y CONFIGURACIONES
@@ -335,7 +367,12 @@ class ModernTestRunnerApp(ctk.CTk):
                     self._update_session_status('B', message[1], message[2])    # Le pasamos como primer argumento "session_id" 'A' o 'B' correspondiente.
                     
                 elif msg_type == 'snmp_listener_status':
-                    ui_tab_monitoring._update_snmp_listener_status(self, message[1], message[2])
+                    session_id = message[1]
+                    status_text = message[2]
+                    color = message[3]
+                    ui_tab_monitoring._update_snmp_listener_status(self, session_id, status_text, color)
+                    
+                    
                 elif msg_type == 'enable_buttons':
                     self.run_button_state(is_running=self.is_main_task_running)
                 elif msg_type == 'debug_log':
@@ -664,25 +701,44 @@ class ModernTestRunnerApp(ctk.CTk):
 
     # Scheduler Buttons
         scheduler_idle_state= "normal" if not is_running else "disabled"
-        scheduler_running_state = "normal" if is_running else "disabled"
+        scheduler_running_state = "normal" if is_running else "disabled"   #??
     
         if hasattr(self, 'run_sequence_button'):
             self.run_sequence_button.configure(state=scheduler_idle_state) # El botón de ejecutar usa 'scheduler_idle_state'. Solo podremos darle al boton cuando no haya nada corriendo.
         if hasattr(self, 'stop_sequence_button'):
             self.stop_sequence_button.configure(state=scheduler_running_state) # El botón de detener usa 'scheduler_running_state'. Solo podemos darle al boton cuando haya algo corriendo (por ejemplo los tests del mismo planificador).
         
-    # SNMP listener Buttons
-        # Listener States: They have to be disabled if theres something running
-        if hasattr(self, 'start_listener_button'): self.start_listener_button.configure(state=idle_state)
-        if hasattr(self, 'stop_listener_button'): self.stop_listener_button.configure(state=idle_state)
-        
-        # Traps Visualizer State: They only need an active session
-        viewer_state = "normal" if session_active else "disabled"   # Lo hacemos ya que tenemos que poder ver traps aunque haya algo corriendo
-        if hasattr(self, 'show_all_traps_button'): self.show_all_traps_button.configure(state=viewer_state)
-        if hasattr(self, 'filter_traps_button'): self.filter_traps_button.configure(state=viewer_state)
-        if hasattr(self, 'reset_traps_button'): self.reset_traps_button.configure(state=viewer_state)
-
-        for btn in self.log_buttons:    # Para los botones de log, solo necesitan que no haya algo corriendo. No es necesario sesion activa
+    # *** SNMP LISTENER *** _ With dual Session Listener
+        # BOTONES DE INICIAR Y PARAR LISTENER
+        for session_id in ['A', 'B']:   # Asignamos 'A' a session_id en la 1a iteración y 'B' en la 2a iteración
+            listener_info = self.trap_listeners.get(session_id)
+            if listener_info:
+                is_listener_running = listener_info['is_running']
+                
+                # No se puede iniciar si ya está corriendo O si una tarea principal está corriendo
+                start_state = "disabled" if is_listener_running or is_running else "normal"
+                # Solo se puede parar si está corriendo Y no hay una tarea principal corriendo
+                stop_state = "normal" if is_listener_running and not is_running else "disabled"
+                 
+                if listener_info['start_button']:   # Comprobamos que el boton de start exista
+                    listener_info['start_button'].configure(state=start_state)
+                if listener_info['stop_button']:    # Comprobamos que el boton de stop exista
+                    listener_info['stop_button'].configure(state=stop_state)
+                    
+        # BOTONES DEL VISUALIZADOR DE TRAPS
+        viewer_state = "normal"    # Los botones de Refrescar, Filtrar traps etc estaran disponibles siempre!
+        for s_id in ['A', 'B']:
+            listener_info = self.trap_listeners[s_id]
+            
+            if listener_info['show_all_button']:        # Comprobamos que el boton de mostrar todos los traps exista.
+                listener_info['show_all_button'].configure(state=viewer_state)
+            if listener_info['filter_button']:          # Comprobamos que el boton de fitrar traps exista.
+                listener_info['filter_button'].configure(state=viewer_state)
+            if listener_info['reset_button']:       # Comprobamos que el boton de reset todos los traps exista.
+                listener_info['reset_button'].configure(state=viewer_state)  
+            
+    # Para los botones de log, solo necesitan que no haya algo corriendo. No es necesario sesion activa
+        for btn in self.log_buttons:   
             btn.configure(state="normal" if not is_running else "disabled")
 
     # Widgets Logic for Alignment Tab (Activate Inputs...)
@@ -945,5 +1001,11 @@ class ModernTestRunnerApp(ctk.CTk):
     def update_task_sequence_display(self):
         ui_tab_scheduler._update_task_sequence_display(self)
         
-    def update_trap_display(self, traps_data):
-        ui_tab_monitoring._update_trap_display(self, traps_data)
+    def update_trap_display(self, traps_data, session_id):
+        """Actualiza el visor de traps para una sesión específica."""
+        listener_info = self.trap_listeners.get(session_id)
+        
+        if listener_info and listener_info['trap_display_widget']:
+            ui_tab_monitoring.update_trap_display(listener_info['trap_display_widget'], traps_data)
+        else:
+            print(f"ERROR: No trap display widget found for session {session_id}")

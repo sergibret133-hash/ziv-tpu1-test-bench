@@ -161,10 +161,11 @@ class MonitoringController:
     def start_correlation_test(self):
             """Inicia la prueba de correlación en un hilo separado."""
             self.app_ref.correlation_button.configure(state="disabled", text="Ejecutando...")
-            self._update_corr_display("Esperando evento...", "Esperando evento...", "PENDIENTE", "gray")
+            active_id = self.app_ref.active_session_id
             
-            # Asumimos que tienes este controlador y que puedes añadirle este método
-            self.app_ref.trap_listener_controller._reset_traps() 
+            self._update_corr_display(active_id, "Esperando evento...", "Esperando evento...", "PENDIENTE", "gray")
+
+            self.app_ref.trap_listener_controller._reset_traps(active_id) 
             
             threading.Thread(target=self._run_correlation_test, daemon=True).start()
 
@@ -181,10 +182,15 @@ class MonitoringController:
         
         
         inputs_list_str = str(inputs_a_probar).replace(" ", "")
+        
+        chrono_data = None # Inicializamos por si el test falla
+        trap_data = []     # Inicializamos por si el listener falla
+        
         try:
             # limpiamos traps antes!
-            self.app_ref.trap_listener_controller._reset_traps()
-            # --- 1. PROVOCAR EL EVENTO ---
+            self.app_ref.trap_listener_controller._reset_traps(active_id)
+            
+            # Ejecutamos la accion de test
             robot_executor._run_robot_test(
                 self.app_ref,
                 test_name="Input Activation",
@@ -201,28 +207,35 @@ class MonitoringController:
             
             time.sleep(wait_time) # Margen para que el equipo procese y envíe
 
-            # --- 2. RECOGER DATOS DEL CRONOLÓGICO ---
+            # *** RECOGEMOS LOS DATOS DEL REGISTRO CRONOLÓGICO ***
             chrono_listener = TestOutputListener(self.app_ref)
             script_path = robot_executor._find_test_file(self.app_ref, "Capture Last Chronological Log Entries", "Chronological_Register.robot")
             
+            session_file_path = self.app_ref.sessions[active_id]['session_file']
+
             robot.run(
                 script_path,
                 test="Capture Last Chronological Log Entries",
-                variable=[f"IP_ADDRESS:{self.app_ref.sessions[active_id]['ip']}", f"SESSION_ALIAS:{active_id}", "EXPECTED_NUM_ENTRIES:2"],
+                variable=[
+                    f"IP_ADDRESS:{self.app_ref.sessions[active_id]['ip']}",
+                    f"SESSION_ALIAS:{active_id}",
+                    "EXPECTED_NUM_ENTRIES:2",
+                    f"SESSION_FILE_PATH:{session_file_path}"
+                          ],
                 listener=chrono_listener,
                 output=None, log=None, report=None, stdout=None, stderr=None
             )
             chrono_data = chrono_listener.chronological_log
 
-            # --- 3. RECOGER DATOS DE TRAPS ---
-            trap_data = self.app_ref.trap_listener_controller.get_raw_traps_for_correlation()
+            # *** RECOGEMOS LOS DATOS DE LOS TRAPS SNMP ***
+            trap_data = self.app_ref.trap_listener_controller.get_raw_traps_for_correlation(active_id)
 
-            # --- 4. COMPARAR Y MOSTRAR ---
-            self._compare_and_update_gui(chrono_data, trap_data, inputs_a_probar) # Busca "Input 1"
+            # *** COMPARAMOS QUE LOS DATOS DEL CRONOLÓGICO Y DE LOS TRAPS COINCIDAN CON LOS DEL ESCENARIO PREPARADO DE LOS INPUTS QUE HEMOS ACTIVADO ***
+            self._compare_and_update_gui(active_id, chrono_data, trap_data, inputs_a_probar) # Busca "Input 1"
 
         except Exception as e:
             self.app_ref.gui_queue.put(('main_status', f"Error en test de correlación: {e}", "red"))
-            self._update_corr_display(f"Error: {e}", "Error", "ERROR", "red")
+            self._update_corr_display(active_id, f"Error: {e}", "Error", "ERROR", "red")
         
         finally:
             # Reactivamos el botón y ponemos el semáforo en VERDE
@@ -369,7 +382,7 @@ class MonitoringController:
         return trap_activation_ok, trap_deactivation_ok, report_lines
         
     
-    def _compare_and_update_gui(self, chrono_data, trap_data, expected_inputs):
+    def _compare_and_update_gui(self, active_id, chrono_data, trap_data, expected_inputs):
         """Compara los resultados y envía la actualización a la GUI."""
         
         # ***Análisis mediante las funciones que comprueban que las activaciones/desactivaciones coincidan con lo esperado***
@@ -438,12 +451,12 @@ class MonitoringController:
             result = "FALLO TOTAL"
             color = "red"
             
-        self._update_corr_display(chrono_text_report, trap_text_report, result, color)
+        self._update_corr_display(active_id, chrono_text_report, trap_text_report, result, color)
         
-    def _update_corr_display(self, chrono_text, trap_text, result, color):
+    def _update_corr_display(self, active_id, chrono_text, trap_text, result, color):
         """Envía los datos de la correlación a la cola de la GUI."""
         self.app_ref.gui_queue.put(
-            ('update_correlation_display', chrono_text, trap_text, result, color)
+            ('update_correlation_display', active_id, chrono_text, trap_text, result, color)
         )
         
         

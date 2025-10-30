@@ -84,8 +84,14 @@ class SchedulerController:
             #  OID
             self.app_ref.task_oid_label.grid(row=3, column=0, padx=10, pady=5, sticky="w")
             self.app_ref.task_oid_entry.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+            # Selector de Sesión
+            if hasattr(self.app_ref, 'task_session_selector') and self.app_ref.task_session_selector:
+                self.app_ref.task_session_selector.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
 
-        
+        elif selected_type == "Limpiar Buffer de Traps":
+                if hasattr(self.app_ref, 'task_session_selector') and self.app_ref.task_session_selector:
+                    self.app_ref.task_session_selector.grid(row=5, column=1, padx=10, pady=5, sticky="ew") # Mostrar selector de sesión
+
 
     def _select_task_in_sequence(self, index):
         """Gestiona la selección de una tarea en la lista."""
@@ -139,6 +145,10 @@ class SchedulerController:
         task_type = self.app_ref.task_type_combo.get()
         on_fail_action = self.app_ref.task_on_fail_combo.get()  # Puede ser "Detener secuencia", "Continuar"
         
+        # Si la tarea es de verificación, forzamos que siempre continúe para que pueda continuar la secuencia con otras tareas. (sobretodo cuando se trata de seguir realizando más comprobaciones de traps)
+        if task_type == "Verificar Traps SNMP Nuevos":
+            on_fail_action = "Continuar"
+        
         task_details = {    # Diccionario de valores que iremos rellenando. ESTE SERÁ EL ELEMENTO QUE AÑADIREMOS AL FINAL A LA LISTA DE SECUENCIA DE TAREAS!
             'type': task_type,
             'name': '', # Lo gaurdaremos mas abajo
@@ -148,20 +158,20 @@ class SchedulerController:
             'vars': '', #Por defecto
             'param': '' # Para Pausa o Traps
         }
+        # **************** Lógica de Sesión (Solo para Tests ****************
+        # *****************************************
+        session_id = 'A'    # por defecto
+        if task_type == "Ejecutar Test" or task_type == "Verificar Traps SNMP Nuevos" or task_type == "Limpiar Buffer de Traps":
+            selected_session_str = self.app_ref.task_session_selector.get() # Para poder escoger la sesion en la que se ejecuta el test
+            session_map = {"Sesión A": "A", "Sesión B": "B"}    # Con esto, definimos un mapeo para que cuando nos pasen p ej "Sesión A", nos quedemos con el valor "A" que es lo que nos interesa guardar después en 'session_id' del diccionario de la tarea
+            session_id = session_map.get(selected_session_str, 'A') # Definimos 'A' como VALOR por defecto
+            task_details['session_id'] = session_id # <-- Se guarda el ID de la sesión
+
 
         if task_type == "Ejecutar Test":
             test_full_name = self.app_ref.task_test_combo.get().strip()
             
-            # **************** Lógica de Sesión (Solo para Tests ****************
-            selected_session_str = self.app_ref.task_session_selector.get() # nuevo -> para poder escoger la sesion en la que se ejecuta el test
-            # Como (al igual que nos ha pasado en alguna otra ocasion) nosotros necesitamos el ID ('A' o 'B') y no todo el texto Sesión A o Sesión B ->
-            session_map = {"Sesión A": "A", "Sesión B": "B"}   # -> Hacemos un mapeo
-            session_id = session_map.get(selected_session_str, 'A') # Definimos 'A' como valor por defecto
-            task_details['session_id'] = session_id # <-- Se guarda el ID de la sesión
-            # *****************************************
-            
             test_name = test_full_name.lstrip(" -")     # Limpiamos el nombre del test si viene con formato '  Test Name'
-            
 
             robot_file_path = robot_executor._find_test_file(self.app_ref, test_name)      # Buscamos el archivo .robot correspondiente
             if not robot_file_path:
@@ -199,11 +209,17 @@ class SchedulerController:
             oid_to_verify = self.app_ref.task_oid_entry.get().strip()
             if not oid_to_verify:
                 task_details['param'] = None
-                task_details['name'] = "Verificar Traps SNMP Nuevos"
+                task_details['name'] = f"Verificar Traps SNMP Nuevos(Sesión: {session_id})"
             else:
                 # Si se especifica OID, la tarea es verificar el OID sin más!
                 task_details['param'] = oid_to_verify
-                task_details['name'] = f"Verificar Trap (OID: {oid_to_verify})"
+                task_details['name'] = f"Verificar Trap (OID: {oid_to_verify}) (Sesión: {session_id})"
+                
+        elif task_type == "Limpiar Buffer de Traps":
+            # session_id ya está definido arriba
+            task_details['name'] = f"Limpiar Buffer de Traps (Sesión: {session_id})"
+            task_details['session_id'] = session_id    
+            
             
         # Añadimos la tarea a la secuencia una vez rellenado sus detalles
         self.app_ref.task_sequence.append(task_details)
@@ -412,6 +428,7 @@ class SchedulerController:
         oid_to_check = None 
         verification_result = "N/A"
         found_evidence = []
+        # all_received = []   # Ya no lo usaremos aqui..
         # Inicializamos las variables antes de comenzar a ejecutar la tarea
         task_failed = False
         result_code = 0 # (PASS)        
@@ -468,28 +485,33 @@ class SchedulerController:
                     self.app_ref.gui_queue.put(('scheduler_log', f" Pausa finalizada.\n", "gray"))
             
             elif task['type'] == "Verificar Traps SNMP Nuevos":
-                if not self.app_ref.trap_listener_controller.is_listener_running():
-                     raise RuntimeError("El Listener SNMP no está iniciado.")
+                session_id = task.get('session_id', 'A') # Obtener sesión, por defecto 'A'
+                
+                if not self.app_ref.trap_listener_controller.is_listener_running(session_id):
+                     raise RuntimeError(f"El Listener SNMP para la Sesión {session_id} no está iniciado.")
                 
                 # Aquí recuperamos el OID que guardamos.
                 oid_to_check = task['param'] 
                 
                 if oid_to_check:
-                    self.app_ref.gui_queue.put(('scheduler_log', f" Buscando trap específico con OID: {oid_to_check}...\n", "gray"))
+                    self.app_ref.gui_queue.put(('scheduler_log', f" Buscando (Sesión {session_id}) trap específico con OID: {oid_to_check}...\n", "gray"))
                 else:
-                    self.app_ref.gui_queue.put(('scheduler_log', " Buscando traps nuevos (genérico)...\n", "gray"))
+                    self.app_ref.gui_queue.put(('scheduler_log', f" Buscando (Sesión {session_id}) traps nuevos (genérico)...\n", "gray"))
 
                 # Llamada a check_and_clear_new_traps. Nos devuelve en "success": '1' si le llegaron traps. '0' si no llegaron. En "found_traps" nos devolvera todos los traps encontrados en caso de no haber proporcionado un OID. 
                 # En caso de proporcionar un OID nos devolverá el trap que coincide con el del OID.
-                verification_success, found_evidence = self.app_ref.trap_listener_controller.check_and_clear_new_traps(oid_to_check)
-
+                verification_success, found_evidence = self.app_ref.trap_listener_controller.check_traps_without_clearing(session_id, oid_to_check)
+                
+# *********************************************************************************************
+            # YA NO HACEMOS USO DE ESTO PORQUE LOS DATOS DE LA DB LOS GUARDAREMOS SOLO CUANDO UTILICEMOS LA TAREA Limpiar Buffer de Traps
                 # Si encontramos traps Y tenemos una DB abierta, los guardamos
-                if found_evidence and self.current_db_path:
-                    try:
-                        db_handler.save_traps_to_db(self.app_ref, found_evidence, self.current_db_path)
-                        self.app_ref.gui_queue.put(('scheduler_log', f"  {len(found_evidence)} traps guardados en {os.path.basename(self.current_db_path)}.\n", "gray"))
-                    except Exception as e:
-                        self.app_ref.gui_queue.put(('scheduler_log', f"  Error guardando traps en DB: {e}\n", "orange"))
+                # if all_received and self.current_db_path:
+                #     try:
+                #         db_handler.save_traps_to_db(self.app_ref, all_received, self.current_db_path)
+                #         self.app_ref.gui_queue.put(('scheduler_log', f"  {len(found_evidence)} traps guardados en {os.path.basename(self.current_db_path)}.\n", "gray"))
+                #     except Exception as e:
+                #         self.app_ref.gui_queue.put(('scheduler_log', f"  Error guardando traps en DB: {e}\n", "orange"))
+# *********************************************************************************************
 
                 if not verification_success:
                     msg = f"FALLÓ: No se recibieron traps"
@@ -506,10 +528,32 @@ class SchedulerController:
                         msg += f" (verificado OID {oid_to_check}).\n" # (Esto es una suposición)
                     else:
                         msg += " nuevos.\n"
+                    self.app_ref.gui_queue.put(('scheduler_log', f"✔ {msg}", "green")) # Color cambiado a verde
                     verification_result = "VERIFIED"
                 
+            elif task['type'] == "Limpiar Buffer de Traps":
+                session_id = task.get('session_id', 'A')
+                self.app_ref.gui_queue.put(('scheduler_log', f" Limpiando buffer de traps (Sesión {session_id})...\n", "gray"))
                 
+                if not self.app_ref.trap_listener_controller.is_listener_running(session_id):
+                     raise RuntimeError(f"El Listener SNMP para la Sesión {session_id} no está iniciado.")
 
+                # Limpiamos datos y obtenemos traps
+                traps_to_save = self.app_ref.trap_listener_controller.clear_traps_buffer(session_id)
+                
+                # Los guardamos en la DB
+                if traps_to_save and self.current_db_path:
+                    try:
+                        db_handler.save_traps_to_db(self.app_ref, traps_to_save, self.current_db_path)
+                        self.app_ref.gui_queue.put(('scheduler_log', f"  {len(traps_to_save)} traps guardados en {os.path.basename(self.current_db_path)}.\n", "gray"))
+                    except Exception as e:
+                        self.app_ref.gui_queue.put(('scheduler_log', f"  Error guardando traps en DB: {e}\n", "orange"))
+                elif traps_to_save:
+                     self.app_ref.gui_queue.put(('scheduler_log', "  No se configuró una DB, traps borrados sin guardar.\n", "orange"))
+                else:
+                    self.app_ref.gui_queue.put(('scheduler_log', "  Buffer ya estaba vacío.\n", "gray"))
+                
+                verification_result = "N/A"
         except Exception as e:
             self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error fatal en la tarea: {e}\n", "red"))
             task_failed = True
@@ -518,7 +562,7 @@ class SchedulerController:
         
         if task['type'] == "Verificar Traps SNMP Nuevos":
             self._log_verification_result(task['name'], oid_to_check, verification_result, found_evidence)
-            
+
         # *** Decidir si continuar ***
         should_stop = task_failed and (task['on_fail'] == "Detener secuencia")  # Solo pararemos la secuencia en el caso de que el test que haya fallado tenga asignado en el on_fail que así sea
         
@@ -541,7 +585,9 @@ class SchedulerController:
 
 
     def _log_verification_result(self, task_name, oid, result, evidence_list): 
+        """Añade una fila al CSV de verificación único."""
         if not self.verification_report_file:
+            self.app_ref.gui_queue.put(('scheduler_log', f"Error: no se pudo inicializar el informe CSV.\n", "red"))
             return # No hacemos nada si no hay archivo inicializado.
         
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -559,6 +605,8 @@ class SchedulerController:
                 writer.writerow([timestamp, task_name, str(oid) if oid else "N/A", result, evidence_str])
         except Exception as e:
             self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error al escribir en el informe CSV: {e}\n", "red"))
+
+
 
 
     def _consolidate_reports(self, sequence_failed):
@@ -612,11 +660,9 @@ class SchedulerController:
         final_color = "red" if sequence_failed else "green"
         self.app_ref.gui_queue.put(('main_status', final_message, final_color))
         
-        
-        
-        if self.verification_report_file:   # Comprobamos que el CSV exista
+        if self.verification_report_file and os.path.exists(self.verification_report_file):
             self.app_ref.gui_queue.put(('scheduler_log', f"✔ Informe de verificación guardado en: {self.verification_report_file}\n", "green"))
-        
+            
         self.app_ref.gui_queue.put(('enable_buttons', None)) # Rehabilitamos botones
         self.app_ref.is_main_task_running = False
         self.stop_sequence_flag.clear()

@@ -21,7 +21,11 @@ def create_scheduler_tab(app_ref):
 
     # Widget permanente: Tipo de Tarea
     ctk.CTkLabel(creator_frame, text="Tipo de Tarea:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
-    app_ref.task_type_combo = ctk.CTkComboBox(creator_frame, values=["Ejecutar Test", "Pausa (segundos)", "Verificar Traps SNMP Nuevos"], command=app_ref.scheduler_controller._on_task_type_change)
+    app_ref.task_type_combo = ctk.CTkComboBox(creator_frame, 
+                                              values=["Ejecutar Test", "Pausa (segundos)", "Verificar Traps SNMP Nuevos", "Limpiar Buffer de Traps"],
+                                              command=app_ref.scheduler_controller._on_task_type_change
+                                              )
+    
     app_ref.task_type_combo.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
 
     # Widget dinámico: Test a Ejecutar
