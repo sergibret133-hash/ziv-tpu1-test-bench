@@ -166,6 +166,7 @@ class ModernTestRunnerApp(ctk.CTk):
                 "${ACTIVATE_DEACTIVATE_BLOCKING}", 
                 "${BLOCKING_DURATION}"
             ],
+            "Send Input Command": ["${RASPBERRY_PI_IP}", "${COMMAND_STR}"],
 
             # --- Tests de Registro Cronológico ---
             "Retrieve Chronological Register": [],
@@ -209,6 +210,7 @@ class ModernTestRunnerApp(ctk.CTk):
             "Program IBTU FFT S3 General": [
                 "${INPUT_LEVEL}", "${POWER_BOOSTING}", "${OUTPUT_LEVEL}"
             ],
+            
         }
 
         # DICCIONARIO DE MAPEO DE ACTUALIZACIÓN DE GUI
@@ -447,9 +449,7 @@ class ModernTestRunnerApp(ctk.CTk):
                             ui_tab_alignment._update_input_activation_display(self, input_state, input_info)
                             
                     elif msg_type == 'program_inputs_success':
-                        # Aqui no hay datos. Procesamos solo si estamos en la sesion activa.
-                        if is_active:
-                            ui_tab_alignment._handle_program_inputs_success(self, message[2], message[3], message[4])
+                        ui_tab_alignment._handle_program_inputs_success(self, message[2], message[3], message[4])
                         
                     elif msg_type == 'update_chrono_log_display':
                         # Guardamos locaalmente
@@ -692,6 +692,7 @@ class ModernTestRunnerApp(ctk.CTk):
         if hasattr(self, 'program_assignments_button'): self.program_assignments_button.configure(state=idle_state)
         if hasattr(self, 'retrieve_inputs_button'): self.retrieve_inputs_button.configure(state=idle_state)
         if hasattr(self, 'program_inputs_button'): self.program_inputs_button.configure(state=idle_state)
+        if hasattr(self, 'hil_pulse_button'): self.hil_pulse_button.configure(state=idle_state)
         if hasattr(self, 'capture_last_entries_button'): self.capture_last_entries_button.configure(state=idle_state)
         if hasattr(self, 'clear_chrono_button'): self.clear_chrono_button.configure(state=idle_state)
         if hasattr(self, 'query_snmp_config_button'): self.query_snmp_config_button.configure(state=idle_state)
@@ -1009,3 +1010,14 @@ class ModernTestRunnerApp(ctk.CTk):
             ui_tab_monitoring.update_trap_display(listener_info['trap_display_widget'], traps_data)
         else:
             print(f"ERROR: No trap display widget found for session {session_id}")
+            
+    def _select_task_in_sequence(self, index_to_select):
+        """
+        Pide a la GUI del planificador que resalte una tarea específica por su índice.
+        Esta función actúa como un "puente" al controlador.
+        """
+        # Delegamos la llamada a la función real, que está en ui_tab_scheduler.py
+        try:
+            ui_tab_scheduler._select_task_in_sequence(self, index_to_select)
+        except Exception as e:
+            print(f"ERROR: No se pudo seleccionar la tarea en la GUI: {e}")

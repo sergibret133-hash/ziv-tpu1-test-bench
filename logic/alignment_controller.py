@@ -50,50 +50,75 @@ class AlignmentController:
             self.app_ref.gui_queue.put(('enable_buttons', None))
             
             
-    def _run_program_inputs_activation_thread(self):
+    def _run_program_inputs_state_thread(self):
         """Validates the requested action and then starts the thread to run the test."""
-        self.app_ref.run_button_state(is_running=True)
+
+
+        # Leemos las casillas de verificación
+        inputs_list = []
+        # 'input_activation_checkboxes' -> lista de CTkCheckBox guardada en app_ref
+        for i, checkbox in enumerate(self.app_ref.input_activation_checkboxes):
+            inputs_list.append(1 if checkbox.get() == 1 else 0)
 
         if self.app_ref.inputs_are_active is None:
             self.app_ref.gui_queue.put(('main_status', "Error: Consulte primero el estado de las entradas.", "red"))
             self.app_ref.run_button_state(is_running=False)
             return
+        
+        
+        #   Leemos los RadioButtons "Activar" / "Desactivar"
+        # 'activation_mode_var' es el StringVar que creamos en la GUI
+        activation_mode = self.app_ref.activation_mode_var.get() # "activate" o "deactivate"
+        activate_deactivate_flag = "1" if activation_mode == "activate" else "0"
 
-        action_to_perform = self.app_ref.activation_mode_var.get()
+        
+        # Leemos la duración
+        # 'input_activation_duration_combo' es el ComboBox de la GUI
+        duration_key = self.app_ref.input_activation_duration_combo.get()
+        duration_value = self.app_ref.duration_map.get(duration_key, "0") # "0", "5", "10", "30", "60"
+        
+        if activate_deactivate_flag == "0":
+            duration_value = "0"
+        
+        # Convertimos la lista de inputs a un string JSON para pasarla
+        inputs_list_str = json.dumps(inputs_list)
+        
+        self.app_ref.run_button_state(is_running=True)
+        threading.Thread(
+            target=self._execute_program_inputs_activation,
+            args=(activate_deactivate_flag, duration_value, inputs_list_str, inputs_list),
+            daemon=True
+            ).start()
 
-        if action_to_perform == "activate" and self.app_ref.inputs_are_active:
+
+    def _execute_program_inputs_activation(self, activate_deactivate_flag, duration, inputs_list_str, inputs_list_py):
+        """Runs the input activation test.
+        argument notation:
+        inputs_list_str: JSON string representing the list of inputs
+        inputs_list_py: Python list representing the list of inputs"""
+        self.app_ref.is_main_task_running = True
+        active_id = self.app_ref.active_session_id
+
+        if activate_deactivate_flag == "1" and self.app_ref.inputs_are_active:
             self.app_ref.gui_queue.put(('main_status', "Aviso: Las entradas ya se encuentran activas.", "orange"))
             self.app_ref.run_button_state(is_running=False)
             return
 
-        if action_to_perform == "deactivate" and not self.app_ref.inputs_are_active:
+        elif activate_deactivate_flag == "0" and not self.app_ref.inputs_are_active:
             self.app_ref.gui_queue.put(('main_status', "Aviso: Las entradas ya se encuentran inactivas.", "orange"))
             self.app_ref.run_button_state(is_running=False)
             return
-
-        threading.Thread(target=self._execute_program_inputs_activation, daemon=True).start()
-
-
-    def _execute_program_inputs_activation(self):
-        """Gathers data from the GUI and runs the input activation test. Assumes validation has passed."""
-        self.app_ref.is_main_task_running = True
-        active_id = self.app_ref.active_session_id
+        
+        
         try:
-            activate_deactivate = "1" if self.app_ref.activation_mode_var.get() == "activate" else "0"
-            duration_str = self.app_ref.duration_combobox.get()
-            duration = self.app_ref.duration_map.get(duration_str, "0")
-
-            inputs_list = [1 if cb.get() == 1 else 0 for cb in self.app_ref.input_activation_checkboxes]
-            inputs_list_str = json.dumps(inputs_list)
-
             variables = [
-                f"ACTIVATE_DEACTIVATE:{activate_deactivate}",
+                f"ACTIVATE_DEACTIVATE:{activate_deactivate_flag}",
                 f"DURATION:{duration}",
                 f"INPUTS_LIST:{inputs_list_str}"
             ]
 
             def on_success_callback(listener):
-                self.app_ref.gui_queue.put(('program_inputs_success', activate_deactivate, duration, inputs_list))
+                self.app_ref.gui_queue.put(('program_inputs_success', active_id, activate_deactivate_flag, duration, inputs_list_py))
 
             robot_executor._run_robot_test(
                 self.app_ref,
@@ -113,8 +138,6 @@ class AlignmentController:
             self.app_ref.is_main_task_running = False
             self.app_ref.gui_queue.put(('enable_buttons', None))
         
-        
-
         
         # *********** LOOP / BLOCKING ************
 
@@ -278,3 +301,105 @@ class AlignmentController:
             widgets['timer_label'].pack(anchor="w")
             
             self.app_ref.start_alignment_countdown(duration_sec, timer_key)
+            
+            
+    # HIL CONTROLLER
+    def run_hil_pulse(self):
+        """
+        Lee las casillas de 'Input Activation' y envía un comando PULSE_BATCH a la Raspberry Pi.
+        """
+        if self.app_ref.is_main_task_running:
+            self.app_ref.gui_queue.put(('main_status', "Error: Ya hay una tarea en ejecución.", "red"))
+            return
+
+        session_id = self.app_ref.active_session_id
+        
+        try:
+            # Obtenemos la IP de la Raspberry
+            ip_address = self.app_ref.rpi_ip_entry.get()
+            if not ip_address:
+                self.app_ref.gui_queue.put(('main_status', "Error: Introduzca la IP de la Raspberry Pi.", "red"))
+                return
+                
+            # Obtenemos la duración del pulso HIL
+            duration_str = self.app_ref.hil_pulse_duration_entry.get()
+            if not duration_str:
+                self.app_ref.gui_queue.put(('main_status', "Error: Introduzca una duración para el pulso HIL.", "red"))
+                return
+            
+            # Validamos que la duración sea un número
+            try:
+                duration_val = float(duration_str)
+                if duration_val <= 0: raise ValueError
+            except ValueError:
+                self.app_ref.gui_queue.put(('main_status', f"Error: Duración debe ser un numero válido: '{duration_str}'. Usar ej: 0.5", "red"))
+                return
+                
+            # Leemos las casillas de verificación
+            # Como input_activation_checkboxes guarda una lista donde cada posicion tiene asignada el input correspondiente y lo que tenemos que pasar nosotros es una lista CON EL NUM INPUTS QUE QUEREMOS ACTIVAR
+            # Recorremos la lista y donde haya un input que queramos activar, nos quedamos con la posición que nos situamos en el vector (+1 ya que comenzamos en 0)
+            checked_inputs = []
+            for i, checkbox in enumerate(self.app_ref.input_activation_checkboxes):     # En cada iteracion, enumerate() va recorriendo input_activation_checkboxes y nos devuelve las dos variables: i, checkbox
+                if checkbox.get() == 1:     # Utilizamos get() porque es la forma de acceder a un elemento de Tkinter
+                    checked_inputs.append(str(i + 1)) # Añadimos el ID del input
+
+            if not checked_inputs:
+                self.app_ref.gui_queue.put(('main_status', "Error: Ningún input HIL seleccionado.", "red"))
+                return
+
+            # Construimos el comando BATCH
+            # Ej: "PULSE_BATCH 0.5 1 3 4"
+            command_str = f"PULSE_BATCH {duration_val} {' '.join(checked_inputs)}"      #' '.join introduce unn espacio (' ') entre cada elemento de la lista 
+
+        except AttributeError as e:
+            self.app_ref.gui_queue.put(('main_status', f"Error: Faltan widgets de HIL en la GUI. {e}", "red"))
+            return
+        except Exception as e:
+            self.app_ref.gui_queue.put(('main_status', f"Error preparando comando HIL: {e}", "red"))
+            return
+
+        print(f"Iniciando test HIL '{command_str}' en la IP {ip_address} para la sesión {session_id}")
+
+        self.app_ref.run_button_state(is_running=True)
+
+        # Iniciamos el hilo que ejecuta el test
+        threading.Thread(
+            target=self._execute_hil_pulse, 
+            args=(session_id, ip_address, command_str),
+            daemon=True
+        ).start()
+        
+    def _execute_hil_pulse(self, session_id, ip_address, command_str):
+            """
+            Ejecuta el test de envío de pulso HIL en un hilo separado.
+            Args:
+                session_id (str): ID de la sesión activa.
+                ip_address (str): Dirección IP de la Raspberry Pi.
+                command_str (str): Comando de pulso HIL a enviar. Disponible en formato "PULSE_BATCH duration input1 input2 ...".
+            """
+            self.app_ref.is_main_task_running = True
+            
+            try:
+                print(f"Iniciando test HIL '{command_str}' en la IP {ip_address} para la sesión {session_id}")
+
+                variables = [
+                    f"RASPBERRY_PI_IP:{ip_address}",
+                    f"COMMAND_STR:{command_str}"
+                ]
+
+                robot_executor._run_robot_test(
+                    self.app_ref,
+                    "Send Input Command",
+                    session_id,
+                    variables,
+                    on_success=None, 
+                    on_pass_message="Pulso(s) HIL enviado(s)",
+                    on_fail_message="Fallo al enviar pulso(s) HIL"
+                )
+            
+            except Exception as e:
+                self.app_ref.gui_queue.put(('main_status', f"Error en la tarea HIL: {e}", "red")) 
+                
+            finally:
+                self.app_ref.is_main_task_running = False
+                self.app_ref.gui_queue.put(('enable_buttons', None))

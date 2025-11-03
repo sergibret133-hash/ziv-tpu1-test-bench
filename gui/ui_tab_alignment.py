@@ -3,17 +3,16 @@ import customtkinter as ctk
 def create_alignment_tab(app_ref):
     """Crea y devuelve el CTkTabView completo para la sección 'EQUIPMENT'."""
     
-    # 1. Crear el contenedor de pestañas
     tab_view = ctk.CTkTabview(app_ref, corner_radius=8)
     tab_view.add("Loops Blocking")
     tab_view.add("Input Activation")
 
     
-    # 2. Delegar el rellenado de cada sub-pestaña a su función correspondiente
+    # Cada función se encarga rellenar su propia pestaña.
     _populate_loops_blocking_tab(app_ref, tab_view.tab("Loops Blocking"))
     _populate_input_activation_tab(app_ref, tab_view.tab("Input Activation"))
     
-    # 3. Devolver el TabView ya construido y rellenado
+    # Devolvemos el TabView ya construido y rellenado
     return tab_view
 
 def _update_alignment_states(app_ref, listener):
@@ -184,83 +183,174 @@ def _alignment_countdown(app_ref, remaining_seconds, timer_key):
 
 # ************************** INPUT ACTIVATION TAB **************************
 def _populate_input_activation_tab(app_ref, tab_frame):
-    """Populates the Input Activation tab with its widgets."""
-    tab_frame.grid_columnconfigure(0, weight=1)
-    tab_frame.grid_rowconfigure(1, weight=1)
-
-    consult_frame = ctk.CTkFrame(tab_frame)
-    consult_frame.grid(row=0, column=0, padx=20, pady=10, sticky="ew")
-    consult_frame.grid_columnconfigure(1, weight=1)
-
-    app_ref.retrieve_inputs_button = ctk.CTkButton(consult_frame, text="Consultar Estado de Entradas", command=app_ref.alignment_controller._run_retrieve_inputs_state_thread)
-    app_ref.retrieve_inputs_button.grid(row=0, column=0, padx=(10, 5), pady=10)
+    """Populates the Input Activation tab with its widgets. Includes Software/Hardware input controls."""
+    # *** FRAME DE CONTROL HIL ***
+    hil_frame = ctk.CTkFrame(tab_frame)
+    hil_frame.pack(pady=(10, 5), padx=10, fill="x", anchor="n")
     
-    app_ref.input_activation_status_label = ctk.CTkLabel(consult_frame, text="Estado: Desconocido", font=ctk.CTkFont(weight="bold"))
-    app_ref.input_activation_status_label.grid(row=0, column=1, padx=10, pady=10, sticky="w")
+    hil_label = ctk.CTkLabel(hil_frame, text="Controlador HIL con Raspberry Pi", font=ctk.CTkFont(weight="bold"))
+    hil_label.pack(side="left", padx=(10, 5))
 
-    app_ref.inputs_scroll_frame = ctk.CTkScrollableFrame(tab_frame, label_text="Entradas Disponibles")
-    app_ref.inputs_scroll_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-    app_ref.inputs_scroll_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+    # Guardamos la entrada de IP en 'app_ref.rpi_ip_entry' para que el controlador la lea
+    app_ref.rpi_ip_entry = ctk.CTkEntry(hil_frame, placeholder_text="IP de Raspberry Pi")
+    app_ref.rpi_ip_entry.pack(side="left", padx=5, fill="x", expand=True)
+
+
+    # *** Cabecera Activación de Entradas  ***
+    input_activation_frame = ctk.CTkFrame(tab_frame)
+    input_activation_frame.pack(pady=5, padx=10, fill="x", anchor="n")
+
+    input_activation_header_frame = ctk.CTkFrame(input_activation_frame, fg_color="transparent")
+    input_activation_header_frame.pack(fill="x", padx=10, pady=(5,0))
+
+    app_ref.retrieve_inputs_button = ctk.CTkButton(input_activation_header_frame, text="Consultar Estado de Entradas", width=150, command=app_ref.alignment_controller._run_retrieve_inputs_state_thread)
+    app_ref.retrieve_inputs_button.pack(side="left")
+
+    app_ref.input_activation_status_label = ctk.CTkLabel(input_activation_header_frame, text="Estado: Desconocido", text_color="gray", font=ctk.CTkFont(weight="bold"))
+    app_ref.input_activation_status_label.pack(side="left", padx=20)
+
+    # Contenedor para la rejilla de checkboxes. _update_input_activation_display lo rellenará de forma dinámica.
+    app_ref.input_checkbox_scroll_frame = ctk.CTkScrollableFrame(tab_frame, label_text="Entradas Disponibles")
+    app_ref.input_checkbox_scroll_frame.pack(pady=10, padx=10, fill="both", expand=True)
     
-    program_main_frame = ctk.CTkFrame(tab_frame)
-    program_main_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
-    program_main_frame.grid_columnconfigure(0, weight=1)
+    # 4 columnas para el frame deslizable
+    app_ref.input_checkbox_scroll_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
     
-    ctk.CTkLabel(program_main_frame, text="Programar Activación/Desactivación", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=10, pady=(5,10), sticky="w")
+    
+    # *******************************************************************************************************************
+    # *** FRAME DE CONTROLES DE EJECUCIÓN ***
+    controls_frame = ctk.CTkFrame(tab_frame)
+    controls_frame.pack(pady=5, padx=10, fill="x", anchor="s")
+    
+    # *** FRAMES INTERNOS PARA SOFTWARE Y HARDWARE ***
+    software_controls_frame = ctk.CTkFrame(controls_frame, fg_color="transparent")
+    hardware_controls_frame = ctk.CTkFrame(controls_frame, fg_color="transparent")
+    
+    # *** Cambiar de modo ***
+    def on_activation_mode_change(mode):
+        if mode == "Software":
+            software_controls_frame.pack(fill="x", expand=True)
+            hardware_controls_frame.pack_forget()
+        elif mode == "Hardware":
+            software_controls_frame.pack_forget()
+            hardware_controls_frame.pack(fill="x", expand=True)
 
-    program_controls_frame = ctk.CTkFrame(program_main_frame, fg_color="transparent")
-    program_controls_frame.grid(row=1, column=0, sticky="ew")
-    program_controls_frame.grid_columnconfigure(2, weight=1)
-
+    # *** Selector para el modo ***
+    mode_selector = ctk.CTkSegmentedButton(
+        controls_frame,
+        values=["Software", "Hardware"],
+        command=on_activation_mode_change
+    )
+    mode_selector.pack(fill="x", padx=10, pady=10)
+    # mode_selector.set("Software") # Estado inicial            
+        
+# *******************************************************************************************************************
+    # *** CONTROLES SOFTWARE *** 
+    software_controls_frame.grid_columnconfigure(2, weight=1)   # De esta manera la columna 2 (la de la entrada de la duración y la del botón de programar inputs) se expanderá
+    
+    # Radio buttons para Activar / Desactivar
     app_ref.activation_mode_var = ctk.StringVar(value="activate")
-    activate_radio = ctk.CTkRadioButton(program_controls_frame, text="Activar", variable=app_ref.activation_mode_var, value="activate")
-    activate_radio.grid(row=0, column=0, padx=10, pady=10, sticky="w")
-    deactivate_radio = ctk.CTkRadioButton(program_controls_frame, text="Desactivar", variable=app_ref.activation_mode_var, value="deactivate")
-    deactivate_radio.grid(row=1, column=0, padx=10, pady=10, sticky="w")
-
-    ctk.CTkLabel(program_controls_frame, text="Duración:").grid(row=0, column=1, padx=(20, 5), pady=10, sticky="e")
-    app_ref.duration_combobox = ctk.CTkComboBox(program_controls_frame, values=list(app_ref.duration_map.keys()))
-    app_ref.duration_combobox.grid(row=0, column=2, padx=(0, 10), pady=10, sticky="ew")
-    app_ref.duration_combobox.set("Permanente")
-
-    app_ref.program_inputs_button = ctk.CTkButton(program_controls_frame, text="Programar Entradas", command=app_ref.alignment_controller._run_program_inputs_activation_thread)
-    app_ref.program_inputs_button.grid(row=1, column=1, columnspan=2, padx=10, pady=10, sticky="ew")
+    activate_radio = ctk.CTkRadioButton(software_controls_frame, text="Activar", variable=app_ref.activation_mode_var, value="activate")
+    activate_radio.grid(row=0, column=0, rowspan=2, padx=10, pady=5, sticky="w")
+    deactivate_radio = ctk.CTkRadioButton(software_controls_frame, text="Desactivar", variable=app_ref.activation_mode_var, value="deactivate")
+    deactivate_radio.grid(row=1, column=0, padx=10, pady=5, sticky="w")
     
-    log_button = ctk.CTkButton(tab_frame, text="📂 Open Last Report (log.html)", state="disabled", command=app_ref._open_log_file)
-    log_button.grid(row=3, column=0, padx=20, pady=(0, 20), sticky="s")
-    app_ref.log_buttons.append(log_button)
+    # DURACION
+    sw_label = ctk.CTkLabel(software_controls_frame, text="Duración (Software):", anchor="w")
+    sw_label.grid(row=0, column=1, padx=(10,0), pady=5, sticky="w")
+    
+    app_ref.input_activation_duration_combo = ctk.CTkComboBox(
+        software_controls_frame, 
+        values=list(app_ref.duration_map.keys()),
+        width=150
+    )
+    app_ref.input_activation_duration_combo.grid(row=1, column=1, padx=(10,5), pady=5, sticky="w")
+    app_ref.input_activation_duration_combo.set("Permanente")
+    
+    # BOTON PROGRAMAR
+    app_ref.program_inputs_button = ctk.CTkButton(
+        software_controls_frame, 
+        text="Programar Entradas (Software)", 
+        command=app_ref.alignment_controller._run_program_inputs_state_thread
+    )
+    app_ref.program_inputs_button.grid(row=0, column=2, padx=10, pady=5, sticky="e")
+    
+# *******************************************************************************************************************
+    # *** CONTROLES HARDWARE ***
+    hardware_controls_frame.grid_columnconfigure(1, weight=1)
+    # Todos los controles de hardware en la misma fila
+    # Entrada de duración del pulso
+    hw_label = ctk.CTkLabel(hardware_controls_frame, text="Duración Pulso (s):", anchor="w")
+    hw_label.grid(row=0, column=0, padx=10, pady=5, sticky="w")
+
+    app_ref.hil_pulse_duration_entry = ctk.CTkEntry(
+        hardware_controls_frame,
+        placeholder_text="ej. : 0.5",
+        width=150
+    )
+    app_ref.hil_pulse_duration_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+    
+    # Botón Enviar Pulso 
+    app_ref.hil_pulse_button = ctk.CTkButton(
+        hardware_controls_frame,
+        text="Enviar Pulso(s) HIL",
+        command=app_ref.alignment_controller.run_hil_pulse
+    )
+    app_ref.hil_pulse_button.grid(row=0, column=2, padx=10, pady=5, sticky="e")
+    
+    
+    
+    on_activation_mode_change("Software")   # Mostramos los controles de Hardware por defecto
+    mode_selector.set("Software")
 
 
-def _update_input_activation_display(app_ref, state, input_list):
-    """Dynamically builds the checkboxes for input activation."""
+
+
+def _update_input_activation_display(app_ref, state, input_info):
+    """Dynamically builds the checkboxes for input activation.
+        state - dict with 'inputs' list VALUE STATE and 'duration' (str) or None if inactive.
+        input_info - list of input NAMES (NOT states)"""
+    # Cancelar temporizador previo si existe
     if app_ref.activation_timer:
         app_ref.after_cancel(app_ref.activation_timer)
         app_ref.activation_timer = None
-        
-    for widget in app_ref.inputs_scroll_frame.winfo_children():
+    
+    # Limpiar checkboxes previos
+    for widget in app_ref.input_checkbox_scroll_frame.winfo_children():
         widget.destroy()
     app_ref.input_activation_checkboxes.clear()
 
-    app_ref.inputs_are_active = state in [True, 'True', '1', 1]
-
-    if app_ref.inputs_are_active:
+    # Actualizamos la etiqueta de estado con el temporizador en caso de ser activado
+    if state:
         app_ref.input_activation_status_label.configure(text="Estado: Activo", text_color="green")
+        app_ref.inputs_are_active = True
+        if state.get("duration", "0") != "0":   # Si la duración no es permanente, iniciar el temporizador. Adquirimos el valor de duración del diccionario 'state'
+            _start_activation_timer(app_ref, int(state["duration"]))
     else:
         app_ref.input_activation_status_label.configure(text="Estado: Inactivo", text_color="orange")
+        app_ref.inputs_are_active = False
 
-    if not input_list:
-        ctk.CTkLabel(app_ref.inputs_scroll_frame, text="No se encontraron entradas o están inactivas.").pack(pady=10)
+    if not input_info or not isinstance(input_info, list):
+        ctk.CTkLabel(app_ref.input_checkbox_scroll_frame, text="No se encontraron entradas o están inactivas.").pack(pady=10)
         return
     
-    app_ref.inputs_scroll_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
-
-    for i, input_state in enumerate(input_list):
-        is_checked = (input_state == '1' or input_state == 1)
-        cb = ctk.CTkCheckBox(app_ref.inputs_scroll_frame, text=f"Entrada {i+1}")
-        if is_checked:
-            cb.select()
-        cb.grid(row=i // 4, column=i % 4, padx=10, pady=5, sticky="w")
-        app_ref.input_activation_checkboxes.append(cb)
+    # Crear checkboxes en una rejilla de 4 columnas
+    cols = 4
+    # Vamos iterando todos los nombres de input_info: ['IPTU-1/Inp 1', 'IPTU-1/Inp 2', 'IPTU-1/Inp 3', ...]
+    for i, input_name in enumerate(input_info):
+        row = i // cols
+        col = i % cols
+        
+        # Usamos 'app_ref.input_checkbox_scroll_frame' como padre
+        checkbox = ctk.CTkCheckBox(app_ref.input_checkbox_scroll_frame, text=f"{i+1}: {input_name}")    # Creamos el checkbox
+        checkbox.grid(row=row, column=col, padx=10, pady=5, sticky="w")
+        
+        # Marcamos la casilla si nos llega info de 'state', si no hemos llegado al final del vector de estado de inputs de 'state' y si el estado que estamos iterando esta activo ( == 1)
+        if state and i < len(state.get("inputs", [])) and state.get("inputs", [])[i] == 1:
+            checkbox.select()
+        
+        # Guardamos la referencia al checkbox
+        app_ref.input_activation_checkboxes.append(checkbox)
         
 def _start_activation_timer(app_ref, duration_seconds):
     """Starts a countdown timer that updates the status label."""
@@ -273,7 +363,7 @@ def _update_countdown(app_ref, remaining_seconds):
     """Updates the countdown label each second."""
     if remaining_seconds > 0:
         app_ref.input_activation_status_label.configure(text=f"Estado: Activo (finaliza en {remaining_seconds}s)", text_color="green")
-        app_ref.activation_timer = app_ref.after(1000, app_ref._update_countdown, remaining_seconds - 1)
+        app_ref.activation_timer = app_ref.after(1000, _update_countdown, app_ref, remaining_seconds - 1)
     else:
         app_ref.input_activation_status_label.configure(text="Estado: Inactivo", text_color="orange")
         app_ref.inputs_are_active = False

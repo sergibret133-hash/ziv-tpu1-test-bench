@@ -14,6 +14,7 @@ COMANDOS
 ON <pin_id>        -> Activa el relé (ej: 'ON 1')
 OFF <pin_id>       -> Desactiva el relé (ej: 'OFF 1')
 PULSE <pin_id> <t> -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
+PULSE_BATCH <t> <pin_id1> <pin_id2> ... -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
 STATE <pin_id>     -> Devuelve el estado actual del pin (1=ON, 0=OFF)
 RESET              -> Apaga todos los relés.
 PING               -> Devuelve 'PONG' (para comprobar conexión)
@@ -23,6 +24,7 @@ import socket
 import sys
 import time
 import RPi.GPIO as GPIO
+import threading
 
 # *** INICIALIZACION ***
 HOST = '0.0.0.0'    # Para escuchar en todas las tarjetas de red disponibles
@@ -41,14 +43,14 @@ RELAY_OFF_STATE = GPIO.HIGH
 # Mapeo de pines GPIO
 # comando : pin_GPIO 
 PIN_MAP = {
-    '1': 17,  # Pin 11
-    '2': 27,  # Pin 13
-    '3': 22,  # Pin 15
-    '4': 23,  # Pin 16
-    '5': 24,   # Pin 18
-    '6': 25,  # Pin 22
-    '7': 5,   # Pin 29
-    '8': 6,   # Pin 31
+    '1': 17,  # Pin 11 Físico
+    '2': 27,  # Pin 13 Físico
+    '3': 22,  # Pin 15 Físico
+    '4': 23,  # Pin 16 Físico
+    '5': 24,   # Pin 18 Físico
+    '6': 25,  # Pin 22 Físico
+    '7': 5,   # Pin 29 Físico
+    '8': 6,   # Pin 31 Físico
 }
 
 # Guarda el estado de todos los relés. Becesario para el comando 'STATE'
@@ -76,7 +78,27 @@ def cleanup_gpio():
     GPIO.cleanup()
 
 # *** FUNCIONES SERVIDOR ***
-
+def _execute_pulse_batch(gpios, duration_s):
+    """Función para ser ejecutada en un hilo separado para el pulso."""
+    try:
+        # Encendemos todos los pines
+        print(f"BATCH: ON (Pines: {gpios})")
+        for pin in gpios:
+            GPIO.output(pin, RELAY_ON_STATE)
+            pin_current_state[pin] = 1
+            
+        # Esperamos la duración del pulso que nos pasan por el argumento
+        time.sleep(duration_s)
+        
+        # Apagamos todos los pines
+        print(f"BATCH: OFF (Pines: {gpios})")
+        for pin in gpios:
+            GPIO.output(pin, RELAY_OFF_STATE)
+            pin_current_state[pin] = 0
+            
+    except Exception as e:
+        print(f"ERROR en hilo BATCH: {e}")
+        
 def parse_and_execute(command_str):
     """
     Toma el comando de texto, lo interpreta y ejecuta la
@@ -84,7 +106,7 @@ def parse_and_execute(command_str):
     """
     command_str = command_str.strip().upper()
     parts = command_str.split() # Separamos por el espacio
-    response = f"El comando '{command_str} no se reconoce :('" 
+    response = f"ERROR: El comando '{command_str} no se reconoce :('" 
 
     if not parts:
         return "ERROR: Comando vacío."
@@ -111,19 +133,28 @@ def parse_and_execute(command_str):
 
         elif cmd == 'PULSE' and len(parts) == 3:
             pin_id = parts[1]
-            pin_gpio = PIN_MAP[pin_id]
-            
             duration_s = float(parts[2])
-
-            # Ejecutar pulso
-            GPIO.output(pin_gpio, RELAY_ON_STATE)
-            pin_current_state[pin_gpio] = 1
-            time.sleep(duration_s)
-            GPIO.output(pin_gpio, RELAY_OFF_STATE)
-            pin_current_state[pin_gpio] = 0
+            pin_gpio = PIN_MAP[pin_id]
+            # Ejecutamos el pulso en un hilo para no bloquear el servidor
+            threading.Thread(target=_execute_pulse_batch, args=([pin_gpio], duration_s), daemon=True).start()   # Reaprovechamos la funcion de Pulse_Batch pasandole una lista con el unico pulso que se manda con este comando.
+            response = f"ACK: Relé {pin_id} (GPIO {pin_gpio}) -> PULSE {duration_s}s INICIADO"
             
-            response = f"ACK: Relé {pin_id} (GPIO {pin_gpio}) -> PULSE {duration_s}s"
-        
+        elif cmd == 'PULSE_BATCH' and len(parts) >= 3:
+            duration_s = float(parts[1])
+            pin_ids = parts[2:]
+            
+            gpios_to_pulse = []
+            for pin in pin_ids:
+                if pin in PIN_MAP:
+                    gpios_to_pulse.append(PIN_MAP[pin])
+            
+            if not gpios_to_pulse:
+                response = "ERROR: Todos los pins introducidos no son validos."
+            else:
+                # Ejecutamos el pulso en un hilo para no bloquear el servidor
+                threading.Thread(target=_execute_pulse_batch, args=(gpios_to_pulse, duration_s), daemon=True).start()
+                response = f"ACK: BATCH PULSE {duration_s}s (Pines: {pin_ids}) INICIADO"
+                
         elif cmd == 'STATE' and len(parts) == 2:
             pin_id = parts[1]
             pin_gpio = PIN_MAP[pin_id]
@@ -179,7 +210,7 @@ def main():
                     data = conn.recv(1024)      # Decidimos recibir hasta 1024 bytes de datos
                     
                     if not data:
-                        # Si 'data' está vacío, el cliente ha cerrado la conexión
+                        # Si data está vacío -> el cliente ha cerrado la conexión
                         print(f"Cliente {addr[0]} desconectado.")
                         break
                     
@@ -192,7 +223,7 @@ def main():
                     
                     # Procesamos el comando y obtenemos respuesta
                     response = parse_and_execute(command)
-                    
+
                     # Enviar respuesta de vuelta al cliente
                     conn.sendall(response.encode('utf-8') + b'\n')
 
