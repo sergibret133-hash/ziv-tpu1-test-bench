@@ -18,12 +18,14 @@ def send_hil_command(raspberry_pi_ip: str, command: str, port: int = 65432):
     """
     Se conecta al servidor HIL de la Raspberry Pi y envía un comando.
     Devuelve la respuesta del servidor.
+    
     COMANDOS
-    ON <pin_id>        -> Activa el relé (ej: 'ON 1')
-    OFF <pin_id>       -> Desactiva el relé (ej: 'OFF 1')
-    PULSE <pin_id> <t> -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
-    PULSE_BATCH <t> <pin_id1> <pin_id2> ... -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
-    STATE <pin_id>     -> Devuelve el estado actual del pin (1=ON, 0=OFF)
+    ON,<pin_id>        -> Activa el relé (ej: 'ON 1')
+    OFF,<pin_id>       -> Desactiva el relé (ej: 'OFF 1')
+    PULSE,<pin_id>,<t> -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
+    PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,... -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
+    STATE,<pin_id>     -> Devuelve el estado actual del pin de salida físico (1=ON, 0=OFF)
+    GET_OUTPUT,<pin_id>  -> Devuelve el estado actual del pin de entrada física (1=ON, 0=OFF)
     RESET              -> Apaga todos los relés.
     PING               -> Devuelve 'PONG' (para comprobar conexión)
     """
