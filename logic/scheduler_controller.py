@@ -372,7 +372,7 @@ class SchedulerController:
             self.current_db_path = None
 
         try:
-            self._initialize_verification_report()
+            self._initialize_verification_report(history_name)
             self.app_ref.gui_queue.put(('scheduler_log', f"  Informe de verificación (.csv) inicializado.\n", "gray"))
         except Exception as e:
             self.app_ref.gui_queue.put(('scheduler_log', f"❌ Error al inicializar informe CSV: {e}\n", "orange"))
@@ -570,11 +570,12 @@ class SchedulerController:
         self._execute_next_task(sequence_failed=should_stop)           
 
     
-    def _initialize_verification_report(self):
+    def _initialize_verification_report(self, report_name):
         """Crea o sobrescribe el CSV de verificación y escribe la cabecera."""
         report_dir = "test_results"
-        self.verification_report_file = os.path.join(report_dir, "verification_report.csv")
 
+        report_filename = f"{report_name}_verification_report.csv"
+        self.verification_report_file = os.path.join(report_dir, report_filename)
         # Nos aseguramos de que el directorio existe
         os.makedirs(report_dir, exist_ok=True)
         

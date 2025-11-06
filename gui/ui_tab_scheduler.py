@@ -171,6 +171,19 @@ def _update_task_sequence_display(app_ref):
         task_label = ctk.CTkLabel(task_frame, text=f"{i+1}. {task['name']}", anchor="w")
         task_label.pack(fill="x")
         
+        # Label de variables
+        task_vars = task.get('vars', '')
+        if task_vars:
+            vars_label = ctk.CTkLabel(task_frame,
+                                      text=f"   Variables: {task_vars}",
+                                      anchor="w",
+                                      text_color="gray",
+                                      font=ctk.CTkFont(size=11)
+                                      )
+            vars_label.pack(fill="x", padx=(15, 0))
+            # Importante que al clicar en las variables también se seleccione la tarea
+            vars_label.bind("<Button-1>", lambda event, index=i: app_ref.scheduler_controller._select_task_in_sequence(index))
+        
         # Hacemos que el frame y la etiqueta sean clickables para seleccionar la fila
         task_frame.bind("<Button-1>", lambda event, index=i: app_ref.scheduler_controller._select_task_in_sequence(index))
         task_label.bind("<Button-1>", lambda event, index=i: app_ref.scheduler_controller._select_task_in_sequence(index))

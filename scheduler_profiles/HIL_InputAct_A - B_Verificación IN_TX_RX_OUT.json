@@ -5,17 +5,17 @@
         "on_fail": "Detener secuencia",
         "session_id": "A",
         "file": "HIL_Tests.robot",
-        "vars": "${RASPBERRY_PI_IP}:10.212.40.14 ${COMMAND_STR}:PULSE 1 5",
+        "vars": "RASPBERRY_PI_IP:10.212.40.14 COMMAND_STR:PULSE_BATCH,10,1,2",
         "param": ""
     },
     {
         "type": "Pausa (segundos)",
-        "name": "PAUSA: 6 segundos",
+        "name": "PAUSA: 11 segundos",
         "on_fail": "Detener secuencia",
         "session_id": null,
         "file": "",
         "vars": "",
-        "param": 6
+        "param": 11
     },
     {
         "type": "Verificar Traps SNMP Nuevos",

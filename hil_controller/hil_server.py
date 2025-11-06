@@ -11,11 +11,11 @@ Funciones:
 4. Convierte esos comandos en acciones físicas (activar/desactivar relés).
 
 COMANDOS
-ON <pin_id>        -> Activa el relé (ej: 'ON 1')
-OFF <pin_id>       -> Desactiva el relé (ej: 'OFF 1')
-PULSE <pin_id> <t> -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
-PULSE_BATCH <t> <pin_id1> <pin_id2> ... -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
-STATE <pin_id>     -> Devuelve el estado actual del pin (1=ON, 0=OFF)
+ON,<pin_id>        -> Activa el relé (ej: 'ON 1')
+OFF,<pin_id>       -> Desactiva el relé (ej: 'OFF 1')
+PULSE,<pin_id>,<t> -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
+PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,... -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
+STATE,<pin_id>     -> Devuelve el estado actual del pin (1=ON, 0=OFF)
 RESET              -> Apaga todos los relés.
 PING               -> Devuelve 'PONG' (para comprobar conexión)
 """
@@ -105,6 +105,8 @@ def parse_and_execute(command_str):
     acción GPIO correspondiente. Devuelve una respuesta.
     """
     command_str = command_str.strip().upper()
+    command_str = command_str.replace(',', ' ')
+    
     parts = command_str.split() # Separamos por el espacio
     response = f"ERROR: El comando '{command_str} no se reconoce :('" 
 

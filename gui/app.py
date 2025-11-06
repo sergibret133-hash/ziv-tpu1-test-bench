@@ -123,92 +123,92 @@ class ModernTestRunnerApp(ctk.CTk):
             # --- Tests de Configuración Básica ---
             "List Detected Modules": [],
             "List assigned Modules and Commands assigned": [],
-            "Assign Prioritized Detected Modules": ["${TP1}", "${TP2}"],
+            "Assign Prioritized Detected Modules": ["TP1", "TP2"],
             "Command Number Assignments": [
-                "${TP1_TX_Command_Number_NUM_COMMANDS}", 
-                "${TP1_RX_Command_Number_NUM_COMMANDS}", 
-                "${TP2_TX_Command_Number_NUM_COMMANDS}", 
-                "${TP2_RX_Command_Number_NUM_COMMANDS}"
+                "TP1_TX_Command_Number_NUM_COMMANDS", 
+                "TP1_RX_Command_Number_NUM_COMMANDS", 
+                "TP2_TX_Command_Number_NUM_COMMANDS", 
+                "TP2_RX_Command_Number_NUM_COMMANDS"
             ],
-            "Open_BasicConfiguration+Configure Display Time Zone": ["${Time_zone}"],
+            "Open_BasicConfiguration+Configure Display Time Zone": ["Time_zone"],
 
             # --- Tests de Asignación de Comandos ---
             "Log and Save Teleprotection Commands and Inputs/Outputs": [],
             "Program Command Assignments": [
-                "${tx_matrix_str}", 
-                "${rx_matrix_str}", 
-                "${tx_list_str}", 
-                "${rx_list_str}"
+                "tx_matrix_str", 
+                "rx_matrix_str", 
+                "tx_list_str", 
+                "rx_list_str"
             ],
 
             # --- Tests de SNMP ---
             "Retrieve Full SNMP Configuration": [],
             "Execute Full SNMP Configuration": [
-                "${SNMP_AGENT_STATE}", "${TRAPS_ENABLE_STATE}", "${TPU_SNMP_PORT}", 
-                "${SNMP_V1_V2_ENABLE}", "${SNMP_V1_V2_READ}", "${SNMP_V1_V2_SET}", 
-                "${SNMP_V3_ENABLE}", "${SNMP_V3_READ_USER}", "${SNMP_V3_READ_PASS}", 
-                "${SNMP_V3_READ_AUTH}", "${SNMP_V3_WRITE_USER}", "${SNMP_V3_WRITE_PASS}", 
-                "${SNMP_V3_WRITE_AUTH}", "${HOSTS_CONFIG_STR}"
+                "SNMP_AGENT_STATE", "TRAPS_ENABLE_STATE", "TPU_SNMP_PORT", 
+                "SNMP_V1_V2_ENABLE", "SNMP_V1_V2_READ", "SNMP_V1_V2_SET", 
+                "SNMP_V3_ENABLE", "SNMP_V3_READ_USER", "SNMP_V3_READ_PASS", 
+                "SNMP_V3_READ_AUTH", "SNMP_V3_WRITE_USER", "SNMP_V3_WRITE_PASS", 
+                "SNMP_V3_WRITE_AUTH", "HOSTS_CONFIG_STR"
             ],
 
             # --- Tests de Alineación (Alignment) ---
-            "Input Activation": ["${ACTIVATE_DEACTIVATE}", "${DURATION}", "${INPUTS_LIST}"],
+            "Input Activation": ["ACTIVATE_DEACTIVATE", "DURATION", "INPUTS_LIST"],
             "Retrieve Inputs Activation State": [],
             "Current Loop and Blocking State": [],
             "Program Teleprotection Loop": [
-                "${LOOP_TELEPROTECTION_NUMBER}", 
-                "${ACTIVATE_DEACTIVATE_LOOP}", 
-                "${LOOP_TYPE}", 
-                "${LOOP_DURATION}"
+                "LOOP_TELEPROTECTION_NUMBER", 
+                "ACTIVATE_DEACTIVATE_LOOP", 
+                "LOOP_TYPE", 
+                "LOOP_DURATION"
             ],
             "Program Teleprotection Blocking": [
-                "${BLOCKING_TELEPROTECTION_NUMBER}", 
-                "${ACTIVATE_DEACTIVATE_BLOCKING}", 
-                "${BLOCKING_DURATION}"
+                "BLOCKING_TELEPROTECTION_NUMBER", 
+                "ACTIVATE_DEACTIVATE_BLOCKING", 
+                "BLOCKING_DURATION"
             ],
-            "Send Input Command": ["${RASPBERRY_PI_IP}", "${COMMAND_STR}"],
+            "Send Input Command": ["RASPBERRY_PI_IP", "COMMAND_STR:\"PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,...\""],
 
             # --- Tests de Registro Cronológico ---
             "Retrieve Chronological Register": [],
             "Delete Chronological Register": [],
             "Capture Last Chronological Log Entries": [
-                "${EXPECTED_NUM_ENTRIES}", 
-                "${EVENT_ALARM_FILTER}", 
-                "${CHRONO_ORDER}"
+                "EXPECTED_NUM_ENTRIES", 
+                "EVENT_ALARM_FILTER", 
+                "CHRONO_ORDER"
             ],
 
             # --- Tests de Módulo IBTU BYTONES ---
             "Retrieve IBTU ByTones Full Configuration": [],
             "Program IBTU ByTones S1 General": [
-                "${RX_OPERATION_MODE}", 
-                "${LOCAL_PERIODICITY}", 
-                "${REMOTE_PERIODICITY}", 
-                "${SNR_THRESHOLD_ACTIVATION}", 
-                "${SNR_THRESHOLD_DEACTIVATION}"
+                "RX_OPERATION_MODE", 
+                "LOCAL_PERIODICITY", 
+                "REMOTE_PERIODICITY", 
+                "SNR_THRESHOLD_ACTIVATION", 
+                "SNR_THRESHOLD_DEACTIVATION"
             ],
             "Program IBTU ByTones S2 Frequencies": [
-                "${TX_SCHEME}", "${TX_GUARD_FREQUENCY}", "${TX_APPLICATION_TYPE_LIST_STR}", 
-                "${TX_FREQUENCY_LIST_STR}", "${RX_SCHEME}", "${RX_GUARD_FREQUENCY}", 
-                "${RX_APPLICATION_TYPE_LIST_STR}", "${RX_FREQUENCY_LIST_STR}"
+                "TX_SCHEME", "TX_GUARD_FREQUENCY", "TX_APPLICATION_TYPE_LIST_STR", 
+                "TX_FREQUENCY_LIST_STR", "RX_SCHEME", "RX_GUARD_FREQUENCY", 
+                "RX_APPLICATION_TYPE_LIST_STR", "RX_FREQUENCY_LIST_STR"
             ],
             "Program IBTU ByTones S3 Levels": [
-                "${BY_TONES_INPUT_LEVEL}", 
-                "${BY_TONES_POWER_BOOSTING}", 
-                "${BY_TONES_OUTPUT_LEVEL}"
+                "BY_TONES_INPUT_LEVEL", 
+                "BY_TONES_POWER_BOOSTING", 
+                "BY_TONES_OUTPUT_LEVEL"
             ],
             
             "Retrieve IBTU FFT Full Configuration": [],
             "Program IBTU FFT S1 General": [
-                "${LOCAL_PERIODICITY}", "${REMOTE_PERIODICITY}",
-                "${SNR_THRESHOLD_ACTIVATION}", "${SNR_THRESHOLD_DEACTIVATION}",
-                "${RX_OPERATION_MODE_LIST_STR}"
+                "LOCAL_PERIODICITY", "REMOTE_PERIODICITY",
+                "SNR_THRESHOLD_ACTIVATION", "SNR_THRESHOLD_DEACTIVATION",
+                "RX_OPERATION_MODE_LIST_STR"
             ],
             "Program IBTU FFT S2 General": [
-                "${TX_BW}", "${TX_GUARD_FREQ}", "${TX_APPLICATION_MODE_LIST_STR}",
-                "${RX_BW}", "${RX_GUARD_FREQ}", "${RX_APPLICATION_MODE_LIST_STR}"
+                "TX_BW", "TX_GUARD_FREQ", "TX_APPLICATION_MODE_LIST_STR",
+                "RX_BW", "RX_GUARD_FREQ", "RX_APPLICATION_MODE_LIST_STR"
             ],
             "Program IBTU FFT S3 General": [
-                "${INPUT_LEVEL}", "${POWER_BOOSTING}", "${OUTPUT_LEVEL}"
+                "INPUT_LEVEL", "POWER_BOOSTING", "OUTPUT_LEVEL"
             ],
             
         }
