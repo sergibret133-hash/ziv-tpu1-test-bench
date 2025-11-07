@@ -16,7 +16,7 @@ class TrapListenerController:
         if hasattr(self.app_ref, 'trap_listeners') and session_id in self.app_ref.trap_listeners:
             return self.app_ref.trap_listeners[session_id].get('is_running', False)     # Si no encuentra el valor de la clave pasada, devolvemos False por defecto
         return False
-    
+    # Para la tarea de verificación de traps sin borrado previo del SchedulerController
     def check_traps_without_clearing(self, session_id, oid_to_check=None):
         """
         Verifica los traps recibidos desde la última comprobación.
@@ -80,8 +80,7 @@ class TrapListenerController:
         
     def clear_traps_buffer(self, session_id):
         """
-        Obtiene todos los traps actuales, los borra del buffer,
-        y los devuelve para que puedan ser guardados en la BD.
+        Obtiene todos los traps actuales, los borra del buffer y los devuelve para que puedan ser guardados en la BD.
         
         Returns:
             list: todos_los_traps_que_habia_antes_de_borrar
@@ -101,7 +100,7 @@ class TrapListenerController:
             received_traps = trap_receiver.get_all_raw_received_traps()
         except Exception as e:
             print(f"Error al obtener traps (Sesión {session_id}): {e}")
-            # Continuar para intentar borrar de todas formas
+            # Continuamos para intentar borrar de todas formas
 
         try:
             trap_receiver.clear_all_received_traps()
@@ -109,7 +108,7 @@ class TrapListenerController:
         except Exception as e:
             print(f"Error al limpiar traps (Sesión {session_id}): {e}")
                 
-        return received_traps # Devuelve los traps que acaba de borrar
+        return received_traps # Devolvemos los traps que acabamos de borrar
 
    
     def _start_snmp_listener_thread(self, session_id):
@@ -294,4 +293,30 @@ class TrapListenerController:
         return trap_receiver.get_all_raw_received_traps()
         
 
-    
+    # Para los informes de rendimiento HIL & SNMP
+    def get_traps_since_index(self, session_id, start_index):
+        """
+        Devuelve solo los traps recibidos a partir de un índice concreto.
+        Ideal para ráfagas: no borra nada, pero aísla los nuevos.
+        """
+        listener_info = self.app_ref.trap_listeners.get(session_id)
+        if not listener_info: return []
+            
+        trap_receiver = listener_info.get('trap_receiver')
+        if not trap_receiver: return []
+
+        # Obtenemos todos los traps (sin borrar)
+        all_last_traps = trap_receiver.get_all_raw_received_traps()
+        
+        # Devolvemos solo los traps desde el índice start_index hasta el final
+        # Si start_index es mayor que la longitud, devuelve lista vacía (correcto)
+        return all_last_traps[start_index:]
+
+    def get_current_trap_count(self, session_id):
+        """Devuelve cuántos traps hay en total ahora mismo."""
+        listener_info = self.app_ref.trap_listeners.get(session_id)
+        if not listener_info: return 0
+        trap_receiver = listener_info.get('trap_receiver')
+        if not trap_receiver: return 0
+        all_traps = trap_receiver.get_all_raw_received_traps()
+        return len(all_traps)

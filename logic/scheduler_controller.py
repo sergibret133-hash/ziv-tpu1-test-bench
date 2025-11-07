@@ -144,11 +144,11 @@ class SchedulerController:
         """Recopila la información de la tarea y la añade a la secuencia"""
         task_type = self.app_ref.task_type_combo.get()
         on_fail_action = self.app_ref.task_on_fail_combo.get()  # Puede ser "Detener secuencia", "Continuar"
-        
+        # *********************************************************
         # Si la tarea es de verificación, forzamos que siempre continúe para que pueda continuar la secuencia con otras tareas. (sobretodo cuando se trata de seguir realizando más comprobaciones de traps)
         if task_type == "Verificar Traps SNMP Nuevos":
             on_fail_action = "Continuar"
-        
+        # *********************************************************
         task_details = {    # Diccionario de valores que iremos rellenando. ESTE SERÁ EL ELEMENTO QUE AÑADIREMOS AL FINAL A LA LISTA DE SECUENCIA DE TAREAS!
             'type': task_type,
             'name': '', # Lo gaurdaremos mas abajo
@@ -498,7 +498,7 @@ class SchedulerController:
                 else:
                     self.app_ref.gui_queue.put(('scheduler_log', f" Buscando (Sesión {session_id}) traps nuevos (genérico)...\n", "gray"))
 
-                # Llamada a check_and_clear_new_traps. Nos devuelve en "success": '1' si le llegaron traps. '0' si no llegaron. En "found_traps" nos devolvera todos los traps encontrados en caso de no haber proporcionado un OID. 
+                # Llamada a check_and_clear_new_traps. Nos devuelve en "success": '1' si le llegaron traps. '0' si no llegaron. En "found_evidence" nos devolvera todos los traps encontrados en caso de no haber proporcionado un OID. 
                 # En caso de proporcionar un OID nos devolverá el trap que coincide con el del OID.
                 verification_success, found_evidence = self.app_ref.trap_listener_controller.check_traps_without_clearing(session_id, oid_to_check)
                 

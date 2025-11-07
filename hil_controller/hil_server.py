@@ -27,10 +27,14 @@ import sys
 import time
 import RPi.GPIO as GPIO
 import threading
-
+import json
 
 # *** INICIALIZACION ***
-
+#  *** Variables globales ***
+t0_logs = []  # Lista para almacenar los logs de T0
+t5_logs = []  # Lista para almacenar los logs de T5
+logging_active = False  # Indicador de si el logging está activo (para los callbacks)
+current_log_channel = None  # Canal que estamos registrando actualmente
 
 # Lógica de los Relés
 # -----------------------------------
@@ -55,7 +59,20 @@ PIN_MAP = {
     '8': 26,   # Pin 31 Físico
 }
 
-OUTPUT_PIN_MAP = {
+# 2. Pines de FEEDBACK T0 (Entradas físicas desde optoacoplador en paralelo a la entrada TPU)
+T0_PIN_MAP = {
+    '1': 4,   # Físico 7
+    '2': 7,   # Físico 26
+    '3': 8,   # Físico 24
+    '4': 9,   # Físico 21
+    '5': 10,  # Físico 19
+    '6': 11,  # Físico 23
+    '7': 14,  # Físico 8 (Nos aseguramos que el serial esté desactivado)
+    '8': 15,  # Físico 10 (Nos aseguramos que el serial esté desactivado)
+}
+
+
+T5_PIN_MAP = {
     '1': 18,
     '2': 23,
     '3': 24,
@@ -68,6 +85,16 @@ OUTPUT_PIN_MAP = {
 
 # Guarda el estado de todos los relés. Becesario para el comando 'STATE'
 pin_states = {pin_id: 0 for pin_id in PIN_MAP.keys()}
+
+def t0_callback_handler(channel):
+    "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T0"
+    if logging_active:
+        t0_logs.append(time.monotonic_ns())
+        
+def t5_callback_handler(channel):
+    "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T5"
+    if logging_active:
+        t5_logs.append(time.monotonic_ns())
 
 # *** FUNCIONES DE GPIO ***
 def setup_gpio():
@@ -83,10 +110,16 @@ def setup_gpio():
     print(f"Salidas físicas activación inputs GPIO listas. {len(PIN_MAP)} relés configurados en modo Activo-Bajo.")
     print(f"Estado inicial salidas físicas activación inputs: OFF (GPIO.{'HIGH' if RELAY_OFF_STATE == GPIO.HIGH else 'LOW'})")
 
-    for pin in OUTPUT_PIN_MAP.values():
+    for pin in T0_PIN_MAP.values():    # Iteramos sobre todos los pines
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)       # Configuramos como pin de ENTRADA con resistencia PULL-DOWN y haya voltaje cuando se active el relé de la IPTU.
+        
+    print(f"Entradas físicas lectura outputs GPIO listas. {len(T0_PIN_MAP)} entradas configuradas con PULL-DOWN.")
+
+
+    for pin in T5_PIN_MAP.values():
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)  # Configuramos como pin de ENTRADA con resistencia PULL-DOWN y haya voltaje cuando se active el relé de la IPTU.
     
-    print(f"Entradas físicas lectura outputs GPIO listas. {len(OUTPUT_PIN_MAP)} entradas configuradas con PULL-DOWN.")
+    print(f"Entradas físicas lectura outputs GPIO listas. {len(T5_PIN_MAP)} entradas configuradas con PULL-DOWN.")
     
 
 def cleanup_gpio():
@@ -159,6 +192,54 @@ def parse_and_execute(command):
         if command == 'PING':
             response = "PONG"
 
+        elif command.startswith("CONFIG_LOG,"):
+            try:
+                channel_id = command.split(',')[1]
+                if channel_id in T0_PIN_MAP:
+                    return f"ERROR, Canal '{channel_id}' no valido"
+                
+                global current_log_channel
+                current_log_channel = channel_id
+                
+                # Obtenemos los pines físicos BCM correspondientes a cada canal.
+                t0_pin = T0_PIN_MAP[channel_id]
+                t5_pin = T5_PIN_MAP[channel_id]
+                
+                # Limpieza de logs anteriores por si acaso
+                GPIO.remove_event_detect(t0_pin)
+                GPIO.remove_event_detect(t5_pin)
+                
+                # Deteccion de flancos (de LOW a HIGH) en los pines de feedback T0 y T5
+                GPIO.add_event_detect(t0_pin, GPIO.RISING, callback=t0_callback_handler)
+                GPIO.add_event_detect(t5_pin, GPIO.RISING, callback=t5_callback_handler)
+
+                return f"ACK, Canal '{channel_id}' configurado para logging. t0_pin={t0_pin}, t5_pin={t5_pin}"
+            
+            except Exception as e:
+                return f"ERROR, No se pudo configurar el canal para logging: {e}"
+            
+        elif command == "START_LOG":    
+            # Iniciamos registro de logs
+            global logging_active
+            t0_logs.clear()     # Limpiamos logs anteriores
+            t5_logs.clear()    # Limpiamos logs anteriores
+            logging_active = True
+            return "ACK, Logging iniciado. "
+        
+        elif command == "STOP_LOG":
+            logging_active = False
+            return f"ACK, Logging detenido. Registros T0: {len(t0_logs)}, Registros T5: {len(t5_logs)}"
+            
+        elif command == "GET_LOGS":
+            # Devolvemos los logs en formato JSON
+            logs_data = {
+                "channel": current_log_channel,
+                "t0_logs": t0_logs,
+                "t5_logs": t5_logs
+            }
+            # Para que el host interprete que le ha llegado los logs, los enviamos con prefijo JSON,
+            return "JSON," + json.dumps(logs_data)
+            
         elif command.startswith("ON,"):
             pin_id = command.split(',')[1]
             return set_pin_state(pin_id, 1)
@@ -204,9 +285,9 @@ def parse_and_execute(command):
             parts = command.split(',')
             if len(parts) == 2:
                 pin_id = parts[1]
-                if pin_id not in OUTPUT_PIN_MAP:
-                    return f"ERROR, Pin ID '{pin_id}' no existe en OUTPUT_PIN_MAP."
-                pin_gpio = OUTPUT_PIN_MAP[pin_id]
+                if pin_id not in T5_PIN_MAP:
+                    return f"ERROR, Pin ID '{pin_id}' no existe en T5_PIN_MAP."
+                pin_gpio = T5_PIN_MAP[pin_id]
                 state = GPIO.input(pin_gpio)
                 if state == GPIO.HIGH:
                     return "STATE,HIGH"

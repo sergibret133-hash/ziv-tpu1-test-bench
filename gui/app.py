@@ -36,6 +36,7 @@ import gui.ui_tab_alarms as ui_tab_alarms
 import logic.db_handler as db_handler
 import logic.robot_executor as robot_executor
 
+import tests.MyKeywords as MyKeywords
 
 from logic.scheduler_controller import SchedulerController
 from logic.equipment_controller import EquipmentController
@@ -44,7 +45,17 @@ from logic.alignment_controller import AlignmentController
 from logic.snmp_controller import SNMPController
 from logic.trap_listener_controller import TrapListenerController
 from logic.alarms_controller import AlarmsController
-# from logic.session_controller import SessionController
+
+
+# directorio donde está app.py
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Subimos para llegar a la raíz del proyecto
+project_root = os.path.dirname(current_dir)
+# ruta a la carpeta tests
+tests_dir = os.path.join(project_root, 'tests')
+
+if tests_dir not in sys.path:   # Añadimos la carpeta tests al sys.path para poder importar MyKeywords
+    sys.path.insert(0, tests_dir)
 
 
 # --- CONFIGURATION ---
@@ -53,7 +64,10 @@ TEST_DIRECTORY = "tests"
 class ModernTestRunnerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-
+        
+        # *** INYECCIÓN DE DEPENDENCIA ***
+        # La app se mete a sí misma dentro del módulo de Robot.
+        MyKeywords.ACTIVE_APP_REF = self
         # ******* 1. INICIALIZACIÓN DE LA VENTANA PRINCIPAL *******
         self.title("ZIV TPU-1 Test Bench")
         self.geometry("1100x850") 
@@ -166,8 +180,8 @@ class ModernTestRunnerApp(ctk.CTk):
                 "ACTIVATE_DEACTIVATE_BLOCKING", 
                 "BLOCKING_DURATION"
             ],
-            "Send Input Command": ["RASPBERRY_PI_IP", "COMMAND_STR:\"PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,...\""],
-
+            "Send Input Command": ["RASPBERRY_PI_IP: COMMAND_STR:PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,..."],
+            "Ejecutar Rafaga De Rendimiento": ["NUM_PULSES: CHANNEL: PULSE_DURATION: LOOP_DELAY: "],
             # --- Tests de Registro Cronológico ---
             "Retrieve Chronological Register": [],
             "Delete Chronological Register": [],
