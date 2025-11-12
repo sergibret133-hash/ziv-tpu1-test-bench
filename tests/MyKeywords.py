@@ -8,8 +8,9 @@ import time
 import os
 import csv
 
-
 ACTIVE_APP_REF = None   # Referencia a la aplicación activa
+HIL_SOCKET = None       # Aqui guardaremos nuestra conexion
+
 def _get_app_ref():
     """Función auxiliar para recuperar la app activa de forma segura y poder usarla en los keywords para acceder a clases que solo la lógica de la aplicación principal tiene acceso."""
     if ACTIVE_APP_REF is not None:
@@ -27,67 +28,111 @@ def get_chrome_options(arguments):
         options.add_argument(arg)
     return options
 
+
+def _ensure_hil_connection(ip: str, port: int):
+    """
+    Asegura que la conexión HIL (HIL_SOCKET) esté abierta
+    En caso de que fuera None (está cerrada o es la primera vez), crea una nueva conexión.
+    """
+    global HIL_SOCKET
+    if HIL_SOCKET is None:
+        try:
+            print(f"HIL (Persistente): Abriendo nueva conexión a {ip}:{port}...")
+
+            # Creamos el socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+            # Ponemos un timeout por defecto para las conexiones
+            sock.settimeout(15.0)
+            
+            # Nos conectamos
+            sock.connect((ip, int(port)))
+            
+            # Asignamos a la variable global la conexion
+            HIL_SOCKET = sock
+            print("HIL Persistente: Conexion realizada")
+            
+        except Exception as e:
+            HIL_SOCKET = None   # Lo dejamos a none aunque falle
+            print(f"HIL (Persistente) ERROR: No se pudo conectar: {e}")
+            raise Exception(f"Fallo crítico al conectar con el HIL: {e}")   # Lo hacemos para que el test falle
+            
+        # Como se puede observar si HIL_SOCKET NO era None, no hacemos nada ya que la conexion está presente.
 # *** HIL CONTROL KEYWORDS ***
-def send_hil_command(raspberry_pi_ip: str, command: str, port: int = 65432):
+def send_hil_command(raspberry_pi_ip: str, command: str, port: int = 65432, timeout: float = 15.0):
     """
     Se conecta al servidor HIL de la Raspberry Pi y envía un comando.
     Devuelve la respuesta del servidor.
     
     COMANDOS
-    ON,<pin_id>          -> Activa el relé (ej: 'ON 1')
-    OFF,<pin_id>         -> Desactiva el relé (ej: 'OFF 1')
-    PULSE,<pin_id>,<t>   -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
-    PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,... -> Activa el relé, espera 't' segundos, lo desactiva (ej: 'PULSE 1 0.5')
-    STATE,<pin_id>       -> Devuelve el estado actual del pin de salida físico (1=ON, 0=OFF)
-    GET_OUTPUT,<pin_id>  -> Devuelve el estado actual del pin de entrada física (1=ON, 0=OFF)
-    RESET                -> Apaga todos los relés.
-    PING                 -> Devuelve 'PONG' (para comprobar conexión)
-    CONFIG_LOG,<pin_id>  -> Configura el pin para logging de tiempos (T0 o T5)
-    START_LOG            -> Inicia el logging de tiempos.
-    STOP_LOG             -> Detiene el logging de tiempos.
-    GET_LOGS             -> Devuelve los logs en formato JSON.
-    """
-    
-    print(f"HIL CMD: Conectando a {raspberry_pi_ip}:{port}...")
-    try:
-        # Crea el socket con un timeout de 5s
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(5.0)
-            s.connect((raspberry_pi_ip, port))
-            
-            # Enviamos el comando
-            s.sendall(command.encode('utf-8'))
-            
-            # Esperamos la respuesta (con maximo 1024 bytes)
-            response = ""
-            while True:
-                part = s.recv(4096).decode('utf-8')
-                response += part
-                if '\n' in part or not part:    # Final de respuesta o conexión cerrada -> Salimos del bucle en el que esperamos respuesta
-                    break
-            
-            response = response.strip() # Limpiamos espacios y saltos de línea
-            print(f"HIL CMD: Comando '{command}' enviado. Respuesta: {response[:150]}...")  # logeamos solo los primeros 150 caracteres para no saturar
-            
-            
-            # Comprobamos la respuesta, realizando las siguientes verifiaciones
-            valid_responses = ["ACK", "PONG", "STATE", "JSON"]
-            if not response.startswith(valid_responses):
-                raise Exception(f"response no coincide con lo que esperabamos (ACK.., PONG, STATE, JSON.. : {response}")
-            
-            return response
+    ---------------------------------------------------------------------
+    -- Control Básico de Relés --
+    ON,<pin_id>        -> Activa el relé (ej: 'ON 1')
+    OFF,<pin_id>       -> Desactiva el relé (ej: 'OFF 1')
+    PULSE,<pin_id>,<t> -> Activa el relé, espera 't' seg, lo desactiva
+    PULSE_BATCH,<t>,<pin_id1>,... -> Ejecuta PULSE en hilos separados
+    RESET              -> Apaga todos los relés.
 
-    except socket.timeout:
-        print(f"HIL ERROR: Timeout al conectar en la IP: {raspberry_pi_ip}", file=sys.stderr)
-        raise Exception(f"Timeout al conectar en la IP: {raspberry_pi_ip}")
-    except ConnectionRefusedError:
-        print(f"HIL ERROR: Conexión rechazada.", file=sys.stderr)
-        raise Exception(f"Conexión rechazada")
+    -- Lectura de Estado --
+    STATE,<pin_id>     -> Devuelve el estado (guardado) del relé (1=ON, 0=OFF)
+    GET_OUTPUT,<pin_id>  -> Devuelve el estado (real) del pin T5 (HIGH/LOW)
+    PING               -> Devuelve 'PONG' (para comprobar conexión)
+
+    -- Performance Logging & Burst --
+    CONFIG_LOG,<pin_id>  -> Reclama los pines T0/T5 para alertas de flanco
+    START_LOG            -> Inicia los hilos de sondeo de eventos T0/T5
+    STOP_LOG             -> Detiene los hilos de sondeo y libera los pines
+    GET_LOGS             -> Devuelve los logs T0/T5 acumulados en formato JSON
+    BURST,<pin>,<n>,<dur>,<del> -> Ejecuta ráfaga local: N pulsos de 'dur' con 'del' seg de retraso entre ellos.
+    """
+    global HIL_SOCKET
+    # Nos aseguramos que haya conexión (persistenete), usando el timeout por defecto (15s) en caso de tener que reconectar
+    _ensure_hil_connection(raspberry_pi_ip, port)
+    
+    original_timeout = HIL_SOCKET.gettimeout()
+
+    try:
+        HIL_SOCKET.settimeout(timeout)
+        print(f"HIL: Timeout del socket ajustado temporalmente a {timeout}s para comando largo.")
+
+        # Enviamos el comando por el socket existente
+        HIL_SOCKET.sendall(command.encode('utf-8'))
+            
+        # Esperamos la RESPUESTA (con maximo 4096 bytes)
+        response = ""
+        while True:
+            part = HIL_SOCKET.recv(4096).decode('utf-8')
+            response += part
+            if '\n' in part or not part:    # Final de respuesta o conexión cerrada -> Salimos del bucle en el que esperamos respuesta
+                break
+            
+        response = response.strip() # Limpiamos espacios y saltos de línea
+        print(f"HIL CMD: Comando '{command}' enviado. Respuesta: {response[:150]}...")  # logeamos solo los primeros 150 caracteres para no saturar
+        
+        
+        # Comprobamos la respuesta, realizando las siguientes verifiaciones
+        valid_responses = ("ACK", "PONG", "STATE", "JSON")
+        if not response.startswith(valid_responses):
+            raise Exception(f"response no coincide con lo que esperabamos (ACK.., PONG, STATE, JSON.. : {response}")
+        return response
+    
+    
+    except (BrokenPipeError, ConnectionResetError, socket.timeout) as e:
+        # Si la conexión finaliza de golpe, intentamos reconectar UNA vez
+        print(f"HIL ERROR: {e}. Intentando reconectar...")
+        HIL_SOCKET = None
+        # Faltaría establecer la reconexión...
+        raise Exception(f"Error HIL durante comando: {e}")
     except Exception as e:
-        print(f"HIL ERROR: {e}", file=sys.stderr)
-        raise Exception(f"Error al enviar comando HIL: {e}")
+        print(f"HIL ERROR Inesperado: {e}")
+        raise e
     
-    
+    finally:
+        # Al final, independientemente de lo que haya pasado, restauramos el timeout original (de esta forma aseguramos pings rapidos!)
+        if HIL_SOCKET:
+            HIL_SOCKET.settimeout(original_timeout)
+        print(f"HIL: Timeout del socket restaurado a {original_timeout}s.")
+        
 def hil_start_performance_log(ip: str, channel: str, port: int = 65432):
     """
     Configura y comienza el logging de tiempos en la Raspberry Pi HIL.
@@ -163,8 +208,34 @@ def _extract_tpu_timestamp(trap_data):
         
     return "N/A"
 
+
+def _extract_trap_type_and_time(trap_data):
+    """
+    Analiza un trap y devuelve su tipo (T1, T2, T3, T4) y su timestamp interno TPU.
+    Devuelve (tipo, timestamp_str) o (None, None) si no es relevante.
+    """
+    # Convertimos a string para búsqueda rápida (aunque sea menos elegante, es robusto)
+    trap_str = json.dumps(trap_data)
+    
+    trap_type = None
+    if "tpu1cNotifyInputCircuits" in trap_str: trap_type = "T1"
+    elif "tpu1cNotifyCommandTx" in trap_str: trap_type = "T2"
+    elif "tpu1cNotifyCommandRx" in trap_str: trap_type = "T3"
+    elif "tpu1cNotifyOutputCircuits" in trap_str: trap_type = "T4"
+    
+    if not trap_type:
+        return None, None
+
+    # Extraemos el timestamp TPU (usando la función que ya tenías o una regex mejorada)
+    # Asumo que tu función _extract_tpu_timestamp existente funciona bien.
+    timestamp = _extract_tpu_timestamp(trap_data)
+    
+    return trap_type, timestamp
+
+
+
 # *** KEYWORD DE GENERACIÓN DE INFORME ***
-def generate_performance_report(rpi_logs, traps_A_list, traps_B_list):
+def generate_performance_report_OLD (rpi_logs, traps_A_list, traps_B_list):
     """
     Genera el CSV maestro cruzando datos de RPi, Sesión A y Sesión B.
     traps_A_list y traps_B_list son listas de listas (una sublista por cada loop).
@@ -214,6 +285,61 @@ def generate_performance_report(rpi_logs, traps_A_list, traps_B_list):
             
     return filename
 
+
+def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
+    """
+    Genera un informe correlacionando listas de traps con logs de RPi.
+    """
+    # Preparamos un diccionario para clasificar los traps SNMP en función del tiempo al que pertenezcan
+    traps_by_type = {"T1": [], "T2": [], "T3": [], "T4": []}
+    
+    # Clasificamos todos los traps de la Sesión A (T1 y T2)
+    for trap in all_traps_a:
+        t_type, t_time = _extract_trap_type_and_time(trap)
+        if t_type in ["T1", "T2"]:
+            traps_by_type[t_type].append(t_time)
+
+    # Clasificamos todos los traps de la Sesión B (T3 y T4)
+    for trap in all_traps_b:
+        t_type, t_time = _extract_trap_type_and_time(trap)
+        if t_type in ["T3", "T4"]:
+            traps_by_type[t_type].append(t_time)
+            
+    # Asumimos que los traps llegan ordenados. Aunque lo ideal sería ordenar las listas..
+    
+    # Generamos el informe CSV
+    filename = f"test_results/burst_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    os.makedirs("test_results", exist_ok=True)
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        # Cabecera
+        writer.writerow(["Ciclo", "T0 (Físico IN)", "T1 (Trap IN)", "T2 (Trap TX)", "T3 (Trap RX)", "T4 (Trap OUT)", "T5 (Físico OUT)", "Delta Total (ms)"])    
+        
+        
+        num_cycles = len(rpi_logs.get('t0_ns', [])) # Utilizamos get() por si no llegaran logs, haríamos len de un vector vacio, y nos daría como resultado 0 en lugar de error
+        
+        for i in range(num_cycles):
+            # Obtenemos T0 y T5
+            t0 = rpi_logs['t0_ns'][i] if i < len(rpi_logs['t0_ns']) else "MISSING"
+            t5 = rpi_logs['t5_ns'][i] if i < len(rpi_logs['t5_ns']) else "MISSING"
+            
+            # Obtenemos T1-T4
+            # Si llegamos a perder un trap en la red UDP, hay peliogro de que perdamos la correlación (tipico en SNMP)
+            t1 = traps_by_type["T1"][i] if i < len(traps_by_type["T1"]) else "MISSING_TRAP"
+            t2 = traps_by_type["T2"][i] if i < len(traps_by_type["T2"]) else "MISSING_TRAP"
+            t3 = traps_by_type["T3"][i] if i < len(traps_by_type["T3"]) else "MISSING_TRAP"
+            t4 = traps_by_type["T4"][i] if i < len(traps_by_type["T4"]) else "MISSING_TRAP"
+            
+            # Calculamos la latencia total
+            delta = "N/A"
+            if isinstance(t0, int) and isinstance(t5, int):     # Comprobamos en primer lugar que los logs existan
+                delta = round((t5 - t0) / 1_000_000.0, 3) # ns a ms con redondeo
+
+            writer.writerow([i+1, t0, t1, t2, t3, t4, t5, delta])
+            
+    print(f"BURST REPORT generado: {filename}")
+    return filename
 
 # Para poder tener acceso a app_ref desde Robot Framework
 def get_current_trap_count(session_id):

@@ -25,6 +25,20 @@ from robot.rebot import rebot_cli
 # Para poder abrir archivos
 from tkinter import filedialog
 
+# directorio donde está app.py
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Subimos para llegar a la raíz del proyecto
+project_root = os.path.dirname(current_dir)
+# ruta a la carpeta tests
+tests_dir = os.path.join(project_root, 'tests')
+
+if tests_dir not in sys.path:   # Añadimos la carpeta tests al sys.path para poder importar MyKeywords
+    sys.path.insert(0, tests_dir)
+    
+import MyKeywords  
+    
+    
+
 # *******************IMPORTS DE OTRAS PARTES DEL PROYECTO*************************
 import gui.ui_sidebar as ui_sidebar
 import gui.ui_tab_scheduler as ui_tab_scheduler
@@ -36,7 +50,7 @@ import gui.ui_tab_alarms as ui_tab_alarms
 import logic.db_handler as db_handler
 import logic.robot_executor as robot_executor
 
-import tests.MyKeywords as MyKeywords
+# import tests.MyKeywords as MyKeywords
 
 from logic.scheduler_controller import SchedulerController
 from logic.equipment_controller import EquipmentController
@@ -47,15 +61,7 @@ from logic.trap_listener_controller import TrapListenerController
 from logic.alarms_controller import AlarmsController
 
 
-# directorio donde está app.py
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Subimos para llegar a la raíz del proyecto
-project_root = os.path.dirname(current_dir)
-# ruta a la carpeta tests
-tests_dir = os.path.join(project_root, 'tests')
 
-if tests_dir not in sys.path:   # Añadimos la carpeta tests al sys.path para poder importar MyKeywords
-    sys.path.insert(0, tests_dir)
 
 
 # --- CONFIGURATION ---
@@ -181,7 +187,7 @@ class ModernTestRunnerApp(ctk.CTk):
                 "BLOCKING_DURATION"
             ],
             "Send Input Command": ["RASPBERRY_PI_IP: COMMAND_STR:PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,..."],
-            "Ejecutar Rafaga De Rendimiento": ["NUM_PULSES: CHANNEL: PULSE_DURATION: LOOP_DELAY: "],
+            "Ejecutar Rafaga De Rendimiento": ["NUM_PULSES: CHANNEL: PULSE_DURATION: LOOP_DELAY:"],
             # --- Tests de Registro Cronológico ---
             "Retrieve Chronological Register": [],
             "Delete Chronological Register": [],
