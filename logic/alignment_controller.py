@@ -304,9 +304,77 @@ class AlignmentController:
             
             
     # HIL CONTROLLER
-    def run_hil_pulse(self):
+    # def run_hil_pulse(self):
+    #     """
+    #     Lee las casillas de 'Input Activation' y envía un comando PULSE_BATCH a la Raspberry Pi.
+    #     """
+    #     if self.app_ref.is_main_task_running:
+    #         self.app_ref.gui_queue.put(('main_status', "Error: Ya hay una tarea en ejecución.", "red"))
+    #         return
+
+    #     session_id = self.app_ref.active_session_id
+        
+    #     try:
+    #         # Obtenemos la IP de la Raspberry
+    #         ip_address = self.app_ref.rpi_ip_entry.get()
+    #         if not ip_address:
+    #             self.app_ref.gui_queue.put(('main_status', "Error: Introduzca la IP de la Raspberry Pi.", "red"))
+    #             return
+                
+    #         # Obtenemos la duración del pulso HIL
+    #         duration_str = self.app_ref.hil_pulse_duration_entry.get()
+    #         if not duration_str:
+    #             self.app_ref.gui_queue.put(('main_status', "Error: Introduzca una duración para el pulso HIL.", "red"))
+    #             return
+            
+    #         # Validamos que la duración sea un número
+    #         try:
+    #             duration_val = float(duration_str)
+    #             if duration_val <= 0: raise ValueError
+    #         except ValueError:
+    #             self.app_ref.gui_queue.put(('main_status', f"Error: Duración debe ser un numero válido: '{duration_str}'. Usar ej: 0.5", "red"))
+    #             return
+                
+    #         # Leemos las casillas de verificación
+    #         # Como input_activation_checkboxes guarda una lista donde cada posicion tiene asignada el input correspondiente y lo que tenemos que pasar nosotros es una lista CON EL NUM INPUTS QUE QUEREMOS ACTIVAR
+    #         # Recorremos la lista y donde haya un input que queramos activar, nos quedamos con la posición que nos situamos en el vector (+1 ya que comenzamos en 0)
+    #         checked_inputs = []
+    #         for i, checkbox in enumerate(self.app_ref.input_activation_checkboxes):     # En cada iteracion, enumerate() va recorriendo input_activation_checkboxes y nos devuelve las dos variables: i, checkbox
+    #             if checkbox.get() == 1:     # Utilizamos get() porque es la forma de acceder a un elemento de Tkinter
+    #                 checked_inputs.append(str(i + 1)) # Añadimos el ID del input
+
+    #         if not checked_inputs:
+    #             self.app_ref.gui_queue.put(('main_status', "Error: Ningún input HIL seleccionado.", "red"))
+    #             return
+
+    #         # Construimos el comando BATCH
+    #         # Ej: "PULSE_BATCH 0.5 1 3 4"
+    #         command_str = f"PULSE_BATCH {duration_val} {' '.join(checked_inputs)}"      #' '.join introduce unn espacio (' ') entre cada elemento de la lista 
+
+    #     except AttributeError as e:
+    #         self.app_ref.gui_queue.put(('main_status', f"Error: Faltan widgets de HIL en la GUI. {e}", "red"))
+    #         return
+    #     except Exception as e:
+    #         self.app_ref.gui_queue.put(('main_status', f"Error preparando comando HIL: {e}", "red"))
+    #         return
+
+    #     print(f"Iniciando test HIL '{command_str}' en la IP {ip_address} para la sesión {session_id}")
+
+    #     self.app_ref.run_button_state(is_running=True)
+
+    #     # Iniciamos el hilo que ejecuta el test
+    #     threading.Thread(
+    #         target=self._execute_hil_pulse, 
+    #         args=(session_id, ip_address, command_str),
+    #         daemon=True
+    #     ).start()
+        
+        
+        
+        
+    def run_hil_burst(self):
         """
-        Lee las casillas de 'Input Activation' y envía un comando PULSE_BATCH a la Raspberry Pi.
+        Lee las casillas de 'Input Activation' y los parametros de rafaga para enviar un comando BURST_BATCH a la Raspberry Pi.
         """
         if self.app_ref.is_main_task_running:
             self.app_ref.gui_queue.put(('main_status', "Error: Ya hay una tarea en ejecución.", "red"))
@@ -321,18 +389,25 @@ class AlignmentController:
                 self.app_ref.gui_queue.put(('main_status', "Error: Introduzca la IP de la Raspberry Pi.", "red"))
                 return
                 
-            # Obtenemos la duración del pulso HIL
+            # Obtenemos los parametros de la rafaga HIL
+            num_pulses_str = self.app_ref.hil_pulses_entry.get()                       
             duration_str = self.app_ref.hil_pulse_duration_entry.get()
-            if not duration_str:
-                self.app_ref.gui_queue.put(('main_status', "Error: Introduzca una duración para el pulso HIL.", "red"))
+            delay_str = self.app_ref.hil_pulse_delay_entry.get()
+            
+            if not all([num_pulses_str, duration_str, delay_str]):
+                self.app_ref.gui_queue.put(('main_status', "Error: Rellene num. pulsos, duración y delay.", "red"))
                 return
             
-            # Validamos que la duración sea un número
+            # Validamos que los paeametros sean números
             try:
-                duration_val = float(duration_str)
-                if duration_val <= 0: raise ValueError
+                num_pulses = str(int(num_pulses_str))
+                duration_val = str(float(duration_str))
+                loop_delay = str(float(delay_str))
+                
+                if int(num_pulses) <= 0 or float(duration_val)<= 0 or float(loop_delay)<= 0:
+                    raise ValueError
             except ValueError:
-                self.app_ref.gui_queue.put(('main_status', f"Error: Duración debe ser un numero válido: '{duration_str}'. Usar ej: 0.5", "red"))
+                self.app_ref.gui_queue.put(('main_status', f"Error: Parámetros de ráfaga deben ser números positivos", "red"))
                 return
                 
             # Leemos las casillas de verificación
@@ -347,9 +422,10 @@ class AlignmentController:
                 self.app_ref.gui_queue.put(('main_status', "Error: Ningún input HIL seleccionado.", "red"))
                 return
 
-            # Construimos el comando BATCH
-            # Ej: "PULSE_BATCH 0.5 1 3 4"
-            command_str = f"PULSE_BATCH {duration_val} {' '.join(checked_inputs)}"      #' '.join introduce unn espacio (' ') entre cada elemento de la lista 
+
+            # Convertimos la lista de inputs a un string separado por comas
+            channels_str = ",".join(checked_inputs)
+
 
         except AttributeError as e:
             self.app_ref.gui_queue.put(('main_status', f"Error: Faltan widgets de HIL en la GUI. {e}", "red"))
@@ -358,48 +434,88 @@ class AlignmentController:
             self.app_ref.gui_queue.put(('main_status', f"Error preparando comando HIL: {e}", "red"))
             return
 
-        print(f"Iniciando test HIL '{command_str}' en la IP {ip_address} para la sesión {session_id}")
+        print(f"Iniciando test HIL en la IP {ip_address} para la sesión {session_id}")
 
         self.app_ref.run_button_state(is_running=True)
 
         # Iniciamos el hilo que ejecuta el test
         threading.Thread(
-            target=self._execute_hil_pulse, 
-            args=(session_id, ip_address, command_str),
+            target=self._execute_hil_burst, 
+            args=(session_id, ip_address, channels_str, num_pulses, duration_val, loop_delay),
             daemon=True
         ).start()
         
-    def _execute_hil_pulse(self, session_id, ip_address, command_str):
-            """
-            Ejecuta el test de envío de pulso HIL en un hilo separado.
-            Args:
-                session_id (str): ID de la sesión activa.
-                ip_address (str): Dirección IP de la Raspberry Pi.
-                command_str (str): Comando de pulso HIL a enviar. Disponible en formato "PULSE_BATCH duration input1 input2 ...".
-            """
-            self.app_ref.is_main_task_running = True
+        
+    
+    # def _execute_hil_pulse(self, session_id, ip_address, command_str):
+    #         """
+    #         Ejecuta el test de envío de pulso HIL en un hilo separado.
+    #         Args:
+    #             session_id (str): ID de la sesión activa.
+    #             ip_address (str): Dirección IP de la Raspberry Pi.
+    #             command_str (str): Comando de pulso HIL a enviar. Disponible en formato "PULSE_BATCH duration input1 input2 ...".
+    #         """
+    #         self.app_ref.is_main_task_running = True
             
-            try:
-                print(f"Iniciando test HIL '{command_str}' en la IP {ip_address} para la sesión {session_id}")
+    #         try:
+    #             print(f"Iniciando test HIL '{command_str}' en la IP {ip_address} para la sesión {session_id}")
 
-                variables = [
-                    f"RASPBERRY_PI_IP:{ip_address}",
-                    f"COMMAND_STR:{command_str}"
-                ]
+    #             variables = [
+    #                 f"RASPBERRY_PI_IP:{ip_address}",
+    #                 f"COMMAND_STR:{command_str}"
+    #             ]
 
-                robot_executor._run_robot_test(
-                    self.app_ref,
-                    "Send Input Command",
-                    session_id,
-                    variables,
-                    on_success=None, 
-                    on_pass_message="Pulso(s) HIL enviado(s)",
-                    on_fail_message="Fallo al enviar pulso(s) HIL"
-                )
+    #             robot_executor._run_robot_test(
+    #                 self.app_ref,
+    #                 "Send Input Command",
+    #                 session_id,
+    #                 variables,
+    #                 on_success=None, 
+    #                 on_pass_message="Pulso(s) HIL enviado(s)",
+    #                 on_fail_message="Fallo al enviar pulso(s) HIL"
+    #             )
             
-            except Exception as e:
-                self.app_ref.gui_queue.put(('main_status', f"Error en la tarea HIL: {e}", "red")) 
+    #         except Exception as e:
+    #             self.app_ref.gui_queue.put(('main_status', f"Error en la tarea HIL: {e}", "red")) 
                 
-            finally:
-                self.app_ref.is_main_task_running = False
-                self.app_ref.gui_queue.put(('enable_buttons', None))
+    #         finally:
+    #             self.app_ref.is_main_task_running = False
+    #             self.app_ref.gui_queue.put(('enable_buttons', None))
+    
+    def _execute_hil_burst(self, session_id, ip_address, channels_str, num_pulses, duration_val, loop_delay):
+        """
+        Ejecuta el test de envío de rafaga HIL en un hilo separado.
+        Args:
+            session_id (str): ID de la sesión activa.
+            ip_address (str): Dirección IP de la Raspberry Pi.
+            parametros (str): channels_str, num_pulses, duration_val, loop_delay".
+        """
+        self.app_ref.is_main_task_running = True
+        
+        try:
+            print(f"Iniciando test HIL en la IP {ip_address} para la sesión {session_id}")
+
+            variables = [
+                f"RASPBERRY_PI_IP:{ip_address}",
+                f"CHANNELS_STR:{channels_str}",
+                f"NUM_PULSES:{num_pulses}",
+                f"PULSE_DURATION:{duration_val}",
+                f"LOOP_DELAY:{loop_delay}",
+            ]
+
+            robot_executor._run_robot_test(
+                self.app_ref,
+                "Ejecutar Rafaga GUI",
+                session_id,
+                variables,
+                on_success=None, 
+                on_pass_message="Rafaga HIL enviada",
+                on_fail_message="Fallo al enviar Rafaga HIL"
+            )
+        
+        except Exception as e:
+            self.app_ref.gui_queue.put(('main_status', f"Error en la tarea HIL: {e}", "red")) 
+            
+        finally:
+            self.app_ref.is_main_task_running = False
+            self.app_ref.gui_queue.put(('enable_buttons', None))

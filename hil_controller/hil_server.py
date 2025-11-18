@@ -38,33 +38,56 @@ BURST,<pin>,<n>,<dur>,<del> -> Ejecuta ráfaga local: N pulsos de 'dur' con 'del
 import socket
 import sys
 import time
-import lgpio
 import threading
 import json
 import os
+
+try:
+    import gpiod
+    from gpiod.line import Direction, Value, Bias, Edge
+    print("GPIOD VERSION:", gpiod.__version__)
+except Exception as e:
+    print("ERROR: No se pudo importar 'gpiod'. Instala python3-libgpiod (libgpiod v2).")
+    print(f"Detalle import error: {e}")
+    sys.exit(1)
+
+from datetime import timedelta
 
 # *** INICIALIZACION ***
 #  *** Variables globales ***
 t0_logs = []  # Lista para almacenar los logs de T0
 t5_logs = []  # Lista para almacenar los logs de T5
 logging_active = False  # Indicador de si el logging está activo (para los callbacks)
-current_log_channel = None  # Canal que estamos registrando actualmente
 
+current_log_channels = []  # Canales que estamos registrando actualmente
+current_log_mode = "ALL"
 # Hilos para los eventos (lo necesita lgpio)
-t0_monitor_thread = None
-t5_monitor_thread = None
+
+t0_monitor_threads = []
+t5_monitor_threads = []
 
 # Handle global para el chip GPIO
-GPIO_CHIP = 0
-CHIP_HANDLE = None
+GPIO_CHIP_NAME = "/dev/gpiochip0"
+CHIP = None
+# Para lgpio
+# GPIO_CHIP = 0
+# CHIP_HANDLE = None
+
+RELAY_REQUESTS = {}      # Diccionario para {pin_id: request_obj}
+T0_REQUESTS = {}                 
+T5_REQUESTS = {}                 
+
+# Guarda el estado de todos los relés. Becesario para el comando 'STATE'
+pin_states = {}
+
 
 # Lógica de los Relés
 # -----------------------------------
 # Teniendo en cuenta que los relés son Activos a Nivvel bajo ->
 #   - Poner el pin GPIO en 0 (0V) -> CIERRA el relé (ON)
 #   - Poner el pin GPIO en 1 (3.3V) -> ABRE el relé (OFF)
-RELAY_ON_STATE = 0  # Equivalente a GPIO.LOW
-RELAY_OFF_STATE = 1 # Equivalente a GPIO.HIGH
+RELAY_ON_STATE = Value.INACTIVE
+RELAY_OFF_STATE = Value.ACTIVE
 
 # Mapeo de pines GPIO
 # comando : pin_GPIO 
@@ -75,7 +98,6 @@ PIN_MAP = {
     '4': 5,  # Pin 29 Físico
     '5': 6,   # Pin 31 Físico
     '6': 13,  # Pin 33 Físico
-
 }
 
 # Pines de FEEDBACK T0 (Entradas físicas desde optoacoplador en paralelo a la entrada TPU)
@@ -85,7 +107,7 @@ T0_PIN_MAP = {
     '3': 23,  # Físico 16
     '4': 24,  # Físico 18
     '5': 25,  # Físico 22
-    '6': 8,   # Físico 24
+    '6': 8,   # Físico 24 (SPI)
 }
 
 # Pines de Recepción de Orden Salida T5 (Entradas físicas RPI conectadas a Relés SSR de salida de la IPTU)
@@ -98,136 +120,158 @@ T5_PIN_MAP = {
     '6': 12,  # Físico 32
 }
 
-# Guarda el estado de todos los relés. Becesario para el comando 'STATE'
-pin_states = {pin_id: 0 for pin_id in PIN_MAP.keys()}
 
-def t0_callback_handler(channel):
+
+def t0_callback_handler(channel, timestamp):
     "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T0"
     if logging_active:
-        t0_logs.append(time.monotonic_ns())
+        t0_logs.append(timestamp)
         
-def t5_callback_handler(channel):
+def t5_callback_handler(channel, timestamp):
     "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T5"
     if logging_active:
-        t5_logs.append(time.monotonic_ns())
+        t5_logs.append(timestamp)
 
-# HILO DE SONDEO (para lgpio) ---
-def _alert_poll_loop(pin, callback):
+# HILO DE SONDEO (para gpiod_v2) ---
+def _alert_poll_loop(channel_id, request_obj, callback):
     """
-    Hilo dedicado a sondear un pin para eventos de flanco. Cada 100ms. lgpio no crea hilos de callback automáticamente como RPi.GPIO.
+    Hilo dedicado a sondear un 'request' gpiod v2 para eventos de flanco.
     """
-    global logging_active, CHIP_HANDLE
-    print(f"[Evento Hilo-{pin}] Iniciado. Esperando 'logging_active'...")
-    
+    global logging_active
+    # Tratamos de obtener el pin para el log
+    try:
+        # Obtenemos el pin BCM desde el objeto request
+        pin_bcm = request_obj.offsets[0]
+        print(f"Evento Hilo del canal {channel_id} y pin GPIO{pin_bcm} Iniciado. Esperando logging_active para seguir")
+    except Exception:
+        pin_bcm = "N/A"
+        print(f"Evento Hilo del canal {channel_id} Iniciado pero sin haber recuperado pin_bcm del objeto request. Esperando logging_active para seguir")
+
     while not logging_active:
-        if CHIP_HANDLE is None: # SI el servidor se cerrara el handle no sería valido
-            print(f"[Evento Hilo-{pin}] Handle de chip no válido. Abortando.")
-            return
-        time.sleep(0.1) #100ms de polling
+        time.sleep(0.05)
 
-    # Una vez salimos del bucle y se solicita hacer logging (activando logging_active)
-    print(f"[Evento Hilo-{pin}] Logging activado. Comenzando sondeo en GPIO {pin}.")
+    print(f"Evento Hilo del canal {channel_id} del pin GPIO{pin_bcm} Logging activado. Comenzamos el sondeo :).")
     try:
         while logging_active:
-            # Esperamos un evento con un timeout de 100ms, ya que sino saturaríamos mucho
-            n, data = lgpio.alert_read_multiple(CHIP_HANDLE, pin, 100, 0.1)
-            if n > 0:
-                # n es el numero de eventos recibidos
-                for i in range(n):
-                    callback(pin) # Si recibimos algun evento, iteramos sobre cada uno de estos y se lo pasamos al callback. RECORDEMOS QUE EL CALLBACK UNICAMENTE AÑADE EL TIMESTAMP A LA LISTA DE LOGS t0_logs Y t5_logs!
+            # Esperamos un evento con timeout de 100ms
+            if request_obj.wait_edge_events(timeout=timedelta(milliseconds=100)):
+                # Leemos los eventos
+                events = request_obj.read_edge_events() # Timeout pequeño para leer
+                for event in events:
+                    # Pasamos el timestamp (en ns) y el pin_id al callback
+                    callback(channel_id, event.timestamp_ns)    # event.timestamp_ns: no ponemos () al final porque no es un metodo!
+    
     except Exception as e:
-        if logging_active: # mponemos esta condicion para que no nos aparezca el error de excepción cuando cerremos
-            print(f"ERROR en Hilo de Evento (GPIO {pin}): {e}")
+        if logging_active:
+            print(f"ERROR en Hilo de Evento en canal {channel_id}: {e}")
     finally:
-        print(f"[Evento Hilo-{pin}] Hilo detenido.")
+        print(f"Evento Hilo {channel_id}. Hilo detenido.")
+        
 
 # *** FUNCIONES DE GPIO ***
 def setup_gpio():
-    """Configura los pines GPIO al iniciar el script."""
-    global CHIP_HANDLE
+    """Configura gpiod. Reclama los pines de salida."""
+    global CHIP, RELAY_REQUESTS, pin_states
     print("Configurando pines GPIO...")
     
     try:
         # Abrimos el chip GPIO
-        CHIP_HANDLE = lgpio.gpiochip_open(GPIO_CHIP)
+        CHIP = gpiod.Chip(GPIO_CHIP_NAME)
+        # Preparamos la config base para todos los relés
+        # Configuramos los pines de salida y su estado por defecto con la configuración anterior (output y valor de RELAY_OFF_STATE)
+        for pin_id, pin_bcm in PIN_MAP.items():    # Iteramos sobre todos los pines de salida. 
+            # Creamos la configuración para ESTE pin específico
+            # Direction.OUTPUT -> Salida
+            # output_value=RELAY_OFF_STATE -> Empieza en HIGH (Relé apagado)
+            settings = gpiod.LineSettings(
+                direction=Direction.OUTPUT, 
+                output_value=RELAY_OFF_STATE
+            )
+            
+            # Solicitamos CADA línea individualmente
+            req = CHIP.request_lines(
+                consumer=f"HIL_Relay_{pin_id}",
+                config={pin_bcm: settings}
+            )
+            RELAY_REQUESTS[pin_id] = req # Guardamos el objeto request
+            pin_states[pin_id] = 0       # Guardamos el estado lógico
+            
+        print(f"Salidas físicas activación inputs GPIO listas. {len(RELAY_REQUESTS)} relés configurados.")
         
-        # GPIO.setmode(GPIO.BCM)  # numeración de pines BCM
-        
-        # Limpieza previa
-        all_pins = set(list(PIN_MAP.values()) + list(T0_PIN_MAP.values()) + list(T5_PIN_MAP.values()))  # Se combinan todos los valores de todos los mapas y con set se acaban juntando todas las listas y se eliminan aquellos valores que se encuentren duplicados.
-        for pin in all_pins:
-            try:
-                lgpio.gpio_free(CHIP_HANDLE, pin)
-            except lgpio.error:
-                pass # Lo que esperaríamos -> Que no esté en uso..
-        
-        # Configuramos los pines de salida y su estado por defecto
-        for pin in PIN_MAP.values():    # Iteramos sobre todos los pines de salida
-            lgpio.gpio_claim_output(CHIP_HANDLE, pin)
-            lgpio.gpio_write(CHIP_HANDLE, pin, RELAY_OFF_STATE) # Aseguramos que todos los relés empiecen APAGADOS
-
-        
-        print(f"Salidas físicas activación inputs GPIO listas. {len(PIN_MAP)} relés configurados en modo Activo-Bajo.")
-        print(f"Estado inicial salidas físicas activación inputs: OFF (GPIO.{'HIGH' if RELAY_OFF_STATE == 1 else 'LOW'})")
-
-
-        # Configuramos los pines de entrada T0 y T5
-        
-        for pin in T0_PIN_MAP.values():    # Iteramos sobre todos los pines
-            lgpio.gpio_claim_input(CHIP_HANDLE, pin, lgpio.SET_PULL_DOWN)       # Configuramos como pin de ENTRADA con resistencia PULL-DOWN y haya voltaje cuando se active el relé de la IPTU. El modo PULL-DOWN lo configuraremos propiamente en el codigo para la condicion de recibir el comando CONFIG_LOG
-
-
-        for pin in T5_PIN_MAP.values():
-            lgpio.gpio_claim_input(CHIP_HANDLE, pin, lgpio.SET_PULL_DOWN)  # Configuramos como pin de ENTRADA con resistencia PULL-DOWN y haya voltaje cuando se active el relé de la IPTU. El modo PULL-DOWN lo configuraremos propiamente en el codigo para la condicion de recibir el comando CONFIG_LOG
-        
-        print(f"Entradas físicas T0 y T5 de lectura outputs-IPTU listas. {len(T5_PIN_MAP) + len(T5_PIN_MAP)} entradas configuradas.")
-    
     except Exception as e:
-        print(f"ERROR FATAL: No se pudo inicializar lgpio.")
+        print(f"ERROR FATAL: No se pudo inicializar gpiod.")
         print(f"Detalle: {e}")
+        if CHIP:
+            CHIP.close()    
         sys.exit(1)
         
 def cleanup_gpio():
-    """Limpia y resetea los pines GPIO al cerrar el script."""
-    global CHIP_HANDLE, logging_active
-    print("\nCerrando servidor y limpiando pines GPIO")
+    """Limpia y libera los pines GPIO al cerrar el script."""
+    global CHIP, RELAY_REQUESTS, logging_active
+    print("\nCerrando servidor y limpiando pines gpio")
     
-    logging_active = False # Señal para que los hilos de sondeo terminen
-    time.sleep(0.2) # Pequeña espera para que los hilos terminen
+    _release_log_pins()
     
-    if CHIP_HANDLE is not None:     # MIentras haya CHIP_HANDLE y el servidor no se haya cerrado ya de forma inesperada..
-        # Liberamos todos los pines asignados en los mapeos
-        all_pins = set(list(PIN_MAP.values()) + list(T0_PIN_MAP.values()) + list(T5_PIN_MAP.values()))      # Al usar set() juntamos todos los valores de las listas y eliminamos los que estén duplicados
-        for pin in all_pins:
-            try:
-                lgpio.gpio_free(CHIP_HANDLE, pin)   # Liberamos cada pin
-            except lgpio.error:
-                pass # No se había usado, por lo que esta libre 
-                
-        # Cerramos el handle del chip
-        lgpio.gpiochip_close(CHIP_HANDLE)
-        CHIP_HANDLE = None
-        print("Lgpio liberados.")
+    if CHIP:
+        # Liberamos todos los pines guardados
+        for req in RELAY_REQUESTS.values():
+            req.release()
+            
+        CHIP.close()
+        CHIP = None
+        print("Lineas gpiod liberadas y chip cerrado.")
 
 
 def set_pin_state(pin_id, state):
     """Establece el estado de un pin GPIO específico de los de salida (RELÉS)"""
-    global CHIP_HANDLE
-    if pin_id in PIN_MAP:
-        pin_gpio = PIN_MAP[pin_id]
+    if pin_id in RELAY_REQUESTS:
+        req = RELAY_REQUESTS[pin_id]
+        pin_bcm = PIN_MAP[pin_id]
+        
         if state == 1:
-            lgpio.gpio_write(CHIP_HANDLE, pin_gpio, RELAY_ON_STATE)
+            req.set_value(pin_bcm, RELAY_ON_STATE)
             pin_states[pin_id] = 1
-            print(f"Pin {pin_id} (GPIO {pin_gpio}) activado (ON)")
+            print(f"Pin {pin_id} GPIO {pin_bcm} activado (ON)")
         else:
-            lgpio.gpio_write(CHIP_HANDLE, pin_gpio, RELAY_OFF_STATE)
+            req.set_value(pin_bcm, RELAY_OFF_STATE)
             pin_states[pin_id] = 0
-            print(f"Pin {pin_id} (GPIO {pin_gpio}) desactivado (OFF)")
+            print(f"Pin {pin_id} GPIO {pin_bcm} desactivado (OFF)")
         return "ACK"    # Una vez asignado el pin GPIO de salidam confirmamos con ACK
     else:
         return "ERROR: Pin ID no válido."
 
 
+def _release_log_pins():
+    "Detiene los hilos y libera los pines de log T0 & T5"
+    global logging_active, T0_REQUESTS, T5_REQUESTS
+    global t0_monitor_threads, t5_monitor_threads
+    
+    # Detenemos los hilos
+    if logging_active:
+        logging_active = False
+        print(f"INFO, Deteniendo hilos de log configurados en CONFIG_LOG")
+        for thread in t0_monitor_threads + t5_monitor_threads:
+            thread.join(timeout=0.2)
+            
+    if not T0_REQUESTS and not T5_REQUESTS:
+        return
+    
+    print(f"INFo, Lberando pines de log..")
+    
+    for req in T0_REQUESTS.values():
+        req.release()
+    for req in T5_REQUESTS.values():
+        req.release()
+
+    T0_REQUESTS.clear()
+    T5_REQUESTS.clear()
+    
+    t0_monitor_threads.clear()
+    t5_monitor_threads.clear()
+    
+    current_log_channels.clear()
+    print("INFO, Pines de log liberados")
+    
 # *** FUNCIONES DE PULSO ***
 def pulse_pin(pin_id, duration):
     """Genera un pulso en un pin GPIO específico durante una duración dada."""
@@ -266,11 +310,13 @@ def execute_burst(pin_id, num_pulses, duration, delay):
     return "ACK, RÁFAGA COMPLETADA"
 
 # *** FUNCIONES SERVIDOR ***
-       
+           
 def parse_and_execute(command):
     """ Toma el comando de texto, lo interpreta y ejecuta la acción GPIO correspondiente """
-    global CHIP_HANDLE, current_log_channel, logging_active
-    global t0_monitor_thread, t5_monitor_thread
+    global CHIP, logging_active
+    global current_log_channels, current_log_mode
+    global T0_REQUESTS, T5_REQUESTS
+    global t0_monitor_threads, t5_monitor_threads
     
     command = command.strip()
     
@@ -280,83 +326,114 @@ def parse_and_execute(command):
 
         elif command.startswith("CONFIG_LOG,"):
             try:
+                _release_log_pins()
+                
+                time.sleep(0.1)
+                
                 parts = command.split(',')
-                channel_id = parts[1].strip()
-                if channel_id not in T0_PIN_MAP or channel_id not in T5_PIN_MAP:
-                    return f"ERROR, Canal '{channel_id}' no valido"
                 
-
-                current_log_channel = channel_id    # current_log_channel nos servirá para saber en el momento que queramos iniciar el log, SI ANTES HA SIDO CONFIGURADO CON CONFIG_LOG!
+                # DETERMINAMOS EL MODO en el que funcionará nuestro sistema y los canales de log
+                log_mode = "ALL"
+                if parts[1] in ["T0", "T5", "All"]:
+                    log_mode = parts[1]
+                    channel_ids = parts[2:]
+                    print(f"Modo log detectado a: {log_mode}")
+                else:
+                    channel_ids = parts[1:]     # Si no nos pasaran el tipo de modo de log, asumimos que nos pasan los canales directamente para hacer un log completo (es por eso que hemos declarado log_mode = "ALL")
                 
-                # Obtenemos los pines físicos BCM correspondientes a cada canal.
-                t0_pin = T0_PIN_MAP[channel_id]
-                t5_pin = T5_PIN_MAP[channel_id]
+                current_log_mode = log_mode
                 
-                # Liberamos por si estuvieran en modo "input" simple
-                lgpio.gpio_free(CHIP_HANDLE, t0_pin)
-                lgpio.gpio_free(CHIP_HANDLE, t5_pin)
+                # print(f"abans clear") 
+                # current_log_channels.clear()
+                # print(f"abans for")
                 
-                time.sleep(0.2)
                 
-                # Reclamamos los pines para alertas de flanco de '0' a '1'
-                lgpio.gpio_claim_alert(CHIP_HANDLE, t0_pin, lgpio.RISING_EDGE, lgpio.SET_PULL_DOWN)
-                lgpio.gpio_claim_alert(CHIP_HANDLE, t5_pin, lgpio.RISING_EDGE, lgpio.SET_PULL_DOWN) 
-
-                return f"ACK, Canal '{channel_id}' configurado para logging. t0_pin={t0_pin}, t5_pin={t5_pin}"
+                # Config de T0: Rising -Edge, PULL-DOWN
+                settings_t0 = gpiod.LineSettings(
+                direction=Direction.INPUT,
+                edge_detection=Edge.RISING,
+                bias=Bias.PULL_DOWN
+                )
+                
+                
+                # Config de T5: FALLING-Edge, PULL-UP
+                settings_t5 = gpiod.LineSettings(   
+                direction=Direction.INPUT,
+                edge_detection=Edge.FALLING,
+                bias=Bias.PULL_UP
+                )
+                
+                current_log_channels.clear()
+                
+                # Reclamamos los elementos gpiod en función del modo que hayamos escogido funcionar nuestro sistema (current_log_mode: ALL, T0 o T5):
+                for channel_id in channel_ids:
+                    channel_id = channel_id.strip()
+                    if channel_id not in T0_PIN_MAP or channel_id not in T5_PIN_MAP:
+                        return f"ERROR, Canal '{channel_id}' no valido"
+                
+                    # Reclamamos los pines para alertas de flanco de '0' a '1' condicionalmente en funcion del tipo de log pasado
+                    if current_log_mode == "ALL" or current_log_mode == "T0":
+                        pin_bcm = T0_PIN_MAP[channel_id]
+                        req = CHIP.request_lines(
+                            consumer=f"HIL_T0_{channel_id}",
+                            config={pin_bcm: settings_t0}
+                        )                        
+                        T0_REQUESTS[channel_id] = req   # Guardamos el request del canal que estammos iterando en la lista de request de T0
+                        print(f"Canal {channel_id}: T0 (GPIO {pin_bcm}) reclamado.")
+                        
+                    if current_log_mode == "ALL" or current_log_mode == "T5":
+                        pin_bcm = T5_PIN_MAP[channel_id]
+                        req = CHIP.request_lines(
+                            consumer=f"HIL_T5_{channel_id}",
+                            config={pin_bcm: settings_t5}
+                        )                        
+                        T5_REQUESTS[channel_id] = req   # Guardamos el request del canal que estammos iterando en la lista de request de T5
+                        print(f"Canal {channel_id}: T5 (GPIO {pin_bcm}) reclamado.")
+                        
+                    current_log_channels.append(channel_id)     # current_log_channel nos servirá para saber en el momento que queramos iniciar el log, SI ANTES HA SIDO CONFIGURADO CON CONFIG_LOG!
+  
+                return f"ACK, Canales '{','.join(current_log_channels)}' configurados para modo de logging {current_log_mode}"
             
             except Exception as e:
+                print(f"Error en CONFIG_LOG: {e}")
                 return f"ERROR, No se pudo configurar el canal para logging: {e}"
             
         elif command == "START_LOG":    
             # Iniciamos registro de logs
-            if not current_log_channel:
-                return "ERROR, No se ha configurado canal. HAY QUE HACERLO ANTES CON EL COMANDO 'CONFIG_LOG,<ch_id>' !"
+            if not current_log_channels:
+                return "ERROR, No se han configurado canales. HAY QUE HACERLO ANTES CON EL COMANDO 'CONFIG_LOG,<ch_id>,<ch_id>..' !"
             
             t0_logs.clear()     # Limpiamos logs anteriores
             t5_logs.clear()    # Limpiamos logs anteriores
-            
-            # Asignamos los dos pines fisicos mapeandolos
-            t0_pin = T0_PIN_MAP[current_log_channel]
-            t5_pin = T5_PIN_MAP[current_log_channel]
+            # t0_monitor_threads.clear()
+            # t5_monitor_threads.clear()  
             
             logging_active = True   # Activamso el flag conforme el log se ha iniciado
             
-            # Creamos e iniciamos los hilos de sondeo. Recordemos que _alert_poll_loop en cuanto detecte que logging_active=True -> Dejará de estar en modo polling (entrará en un nuevo while que llama a callback que añade el timestamp PERO SIN ESPERAR LOS 100ms en cada iteración)
-            t0_monitor_thread = threading.Thread(target=_alert_poll_loop, args=(t0_pin, t0_callback_handler), daemon=True)
-            t5_monitor_thread = threading.Thread(target=_alert_poll_loop, args=(t5_pin, t5_callback_handler), daemon=True)
-            t0_monitor_thread.start()
-            t5_monitor_thread.start()
+            # Iniciamos los hilos de T0 (si no hay, no iteraremos ninguno)
+            for channel_id, req_obj in T0_REQUESTS.items():
+                thread = threading.Thread(target=_alert_poll_loop, args=(channel_id, req_obj, t0_callback_handler), daemon=True)
+                t0_monitor_threads.append(thread)
+                thread.start()
             
-            return "ACK, Logging iniciado. "
+            # Iniciamos los hilos de T5 (si no hay, no iteraremos ninguno)
+            for channel_id, req_obj in T5_REQUESTS.items():
+                thread = threading.Thread(target=_alert_poll_loop, args=(channel_id, req_obj, t5_callback_handler), daemon=True)
+                t5_monitor_threads.append(thread)
+                thread.start()                
+                                
+            return f"ACK, Logging iniciado para {len(current_log_channels)} canales"
         
         elif command == "STOP_LOG":
-            if not current_log_channel:
-                 return "ERROR, No hay un log activo que detener."
-             
-            logging_active = False
-            # Esperamos a que los hilos creados para el monitoreo hayan terminado
-            if t0_monitor_thread:
-                t0_monitor_thread.join(timeout=0.5)
-            if t5_monitor_thread:
-                t5_monitor_thread.join(timeout=0.5)
-            # *********************************************************************************
-            # Para poder liberar los pines tenemos que mapear y quedarnos con el pin fisico antes!
-            t0_pin = T0_PIN_MAP[current_log_channel]
-            t5_pin = T5_PIN_MAP[current_log_channel]   
-            # *********************************************************************************
-            # Liberamos los pines
-            lgpio.gpio_free(CHIP_HANDLE, t0_pin)
-            lgpio.gpio_free(CHIP_HANDLE, t5_pin)
-            
-            # Para dejar listos los pines a futuro los volvemos a configurar como entradas simples
-            lgpio.gpio_claim_input(CHIP_HANDLE, t0_pin, lgpio.SET_PULL_DOWN)
-            lgpio.gpio_claim_input(CHIP_HANDLE, t5_pin, lgpio.SET_PULL_DOWN)
+            if not logging_active:
+                 return "ERROR, No hay logging activo."
+            _release_log_pins()
             return f"ACK, Logging detenido. Registros T0: {len(t0_logs)}, Registros T5: {len(t5_logs)}"
             
         elif command == "GET_LOGS":
             # Devolvemos los logs en formato JSON
             logs_data = {
-                "channel": current_log_channel,
+                "channels": ",".join(current_log_channels),
                 "t0_ns": t0_logs,
                 "t5_ns": t5_logs
             }
@@ -416,21 +493,66 @@ def parse_and_execute(command):
             except (IndexError, ValueError):
                 return "ERROR,Comando BURST inválido. Formato correcto: BURST,<pin_id>,<num_pulses>,<duration_s>,<delay>"
 
+        elif command.startswith("BURST_BATCH,"):
+            try:
+                parts = command.split(',')
+                num_pulses = int(parts[1])
+                duration_s = float(parts[2])
+                delay = float(parts[3])
+                pin_ids = parts[4:]
+                
+                if not pin_ids:
+                    return "ERROR, BURST_BATCH necesita al menos un pin_id"
+                
+                threads = []
+                
+                for pin_id in pin_ids:
+                    if pin_id in PIN_MAP:
+                        thread = threading.Thread(target=execute_burst, args=(pin_id, num_pulses, duration_s, delay))
+                        threads.append(thread)
+                        thread.start()
+                    else:
+                        print(f"WARNING, pin_id '{pin_id}' no se encuentra en PIN_MAP")
+                
+                # Esperamos a que los hilos de las rafagas finalicen..
+                for thread in threads:
+                    thread.join()
+                
+                return "ACK, BURST_BARCH se ha realizado con exito! :)"
 
+            except (IndexError, ValueError):
+                return "ERROR, Comando BURST_BATCH invalido. El formato debe ser: BURST_BATCH,<num_pulses>,<duration_s>,<delay>,<pin1>,<pin2>,..."
+            
         elif command.startswith("GET_OUTPUT,"):
             parts = command.split(',')
             if len(parts) == 2:
                 pin_id = parts[1]
                 if pin_id not in T5_PIN_MAP:
                     return f"ERROR, Pin ID '{pin_id}' no existe en T5_PIN_MAP."
-                pin_gpio = T5_PIN_MAP[pin_id]
                 
-                state= lgpio.gpio_read(CHIP_HANDLE, pin_gpio)   # Adquirimos el estado del pin de entrada fisico (que proviene de la generación del OUTPUT de la IPTU)
-                # Como los reles de la generacion de salidas de la IPTU funciona ACTIVO-ALTO 
-                if state == 1:  
-                    return "STATE,HIGH"
-                else:
-                    return "STATE,LOW"
+                pin_bcm = T5_PIN_MAP[pin_id]
+
+                # Describimos la nueva confiuración del pin que vamos a reclamar
+                settings_read = gpiod.LineSettings(
+                direction=Direction.INPUT,
+                bias=Bias.PULL_UP
+                )
+                
+                req = None
+                try:    # Reclamamos el pin
+                    req = CHIP.request_lines(
+                        consumer="HIL_GET_OUTPUT",
+                        config={pin_bcm: settings_read}
+                    )                    
+                    state = req.get_value(pin_bcm)
+                    # Como los reles de la generacion de salidas de la IPTU funciona ACTIVO-ALTO 
+                    if state == Value.INACTIVE:  
+                        return "STATE,HIGH"
+                    else:
+                        return "STATE,LOW"
+                finally:
+                    if req:
+                        req.release()  # Liberamos la linea
             else:
                 return "ERROR,Comando GET_OUTPUT inválido. Formato correcto: GET_OUTPUT,<pin_id>"
 
@@ -442,6 +564,8 @@ def parse_and_execute(command):
             else:
                 return f"ERROR,Pin ID '{pin_id}' no existe en pin_states."
 
+            
+            
         elif command == 'RESET':
             for pin_id in PIN_MAP.keys():
                 set_pin_state(pin_id, 0)

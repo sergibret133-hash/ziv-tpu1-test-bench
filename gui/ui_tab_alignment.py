@@ -277,30 +277,39 @@ def _populate_input_activation_tab(app_ref, tab_frame):
     
 # *******************************************************************************************************************
     # *** CONTROLES HARDWARE ***
-    hardware_controls_frame.grid_columnconfigure(1, weight=1)
-    # Todos los controles de hardware en la misma fila
-    # Entrada de duración del pulso
-    hw_label = ctk.CTkLabel(hardware_controls_frame, text="Duración Pulso (s):", anchor="w")
-    hw_label.grid(row=0, column=0, padx=10, pady=5, sticky="w")
+    hardware_controls_frame.grid_columnconfigure(3, weight=1)
+    
+    # Fila 1: Canales & Pulsos
+    hw_label_pulses = ctk.CTkLabel(hardware_controls_frame, text="Num Pulsos:", anchor="w")
+    hw_label_pulses.grid(row=0, column=0, padx=10, pady=5, sticky="w")
+    app_ref.hil_pulses_entry = ctk.CTkEntry(hardware_controls_frame, placeholder_text="ej. 10", width=100)
+    app_ref.hil_pulses_entry.insert(0, "10")
+    app_ref.hil_pulses_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+    
+    # Fila 2: Entrada de duración del pulso y Delay
+    # Duracion
+    hw_label_duration = ctk.CTkLabel(hardware_controls_frame, text="Duración (s):", anchor="w")
+    hw_label_duration.grid(row=1, column=0, padx=10, pady=5, sticky="w")
 
-    app_ref.hil_pulse_duration_entry = ctk.CTkEntry(
-        hardware_controls_frame,
-        placeholder_text="ej. : 0.5",
-        width=150
-    )
-    app_ref.hil_pulse_duration_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+    app_ref.hil_pulse_duration_entry = ctk.CTkEntry(hardware_controls_frame, placeholder_text="ej. 0.5", width=100)
+    app_ref.hil_pulse_duration_entry.insert(0, "0.5")
+    app_ref.hil_pulse_duration_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
     
-    # Botón Enviar Pulso 
-    app_ref.hil_pulse_button = ctk.CTkButton(
-        hardware_controls_frame,
-        text="Enviar Pulso(s) HIL",
-        command=app_ref.alignment_controller.run_hil_pulse
-    )
-    app_ref.hil_pulse_button.grid(row=0, column=2, padx=10, pady=5, sticky="e")
+    # Delay
+    hw_label_delay = ctk.CTkLabel(hardware_controls_frame, text="Delay (s):", anchor="w")
+    hw_label_delay.grid(row=1, column=2, padx=10, pady=5, sticky="w")
+
+    app_ref.hil_pulse_delay_entry = ctk.CTkEntry(hardware_controls_frame, placeholder_text="ej. 1.0", width=100)
+    app_ref.hil_pulse_delay_entry.insert(0, "1.0")
+    app_ref.hil_pulse_delay_entry.grid(row=1, column=3, padx=5, pady=5, sticky="w")
+    
+    # Botón Enviar Rafaga 
+    app_ref.hil_burst_button = ctk.CTkButton(hardware_controls_frame, text="Enviar Pulso(s) HIL", command=app_ref.alignment_controller.run_hil_burst)
+    app_ref.hil_burst_button.grid(row=0, column=4, padx=10, pady=5, sticky="e")
     
     
     
-    on_activation_mode_change("Software")   # Mostramos los controles de Hardware por defecto
+    on_activation_mode_change("Software")   # Mostramos los controles de Software por defecto
     mode_selector.set("Software")
 
 

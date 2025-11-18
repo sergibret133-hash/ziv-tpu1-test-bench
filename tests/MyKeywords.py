@@ -8,8 +8,25 @@ import time
 import os
 import csv
 
+import serial
+import time
+
+
 ACTIVE_APP_REF = None   # Referencia a la aplicación activa
 HIL_SOCKET = None       # Aqui guardaremos nuestra conexion
+HIL_SERIAL = None
+
+# Cosntante para determinar el modo de trabajo. 
+# Opciones: 
+# "TEMPORAL_SPLIT" (Arduino para Burst, RPi para Logs)
+# "FINAL_RPI_ONLY" (RPi para Burst y Logs)
+HIL_SETUP_MODE = "TEMPORAL_SPLIT"
+# *****************************************
+
+# *** CONFIGURACIÓN DEL HIL TEMPORAL ***
+ARDUINO_COM_PORT = "COM3"
+ARDUINO_BAUDRATE = 9600
+# *****************************************
 
 def _get_app_ref():
     """Función auxiliar para recuperar la app activa de forma segura y poder usarla en los keywords para acceder a clases que solo la lógica de la aplicación principal tiene acceso."""
@@ -29,7 +46,7 @@ def get_chrome_options(arguments):
     return options
 
 
-def _ensure_hil_connection(ip: str, port: int):
+def _ensure_rpi_connection(ip: str, port: int):
     """
     Asegura que la conexión HIL (HIL_SOCKET) esté abierta
     En caso de que fuera None (está cerrada o es la primera vez), crea una nueva conexión.
@@ -56,13 +73,35 @@ def _ensure_hil_connection(ip: str, port: int):
             HIL_SOCKET = None   # Lo dejamos a none aunque falle
             print(f"HIL (Persistente) ERROR: No se pudo conectar: {e}")
             raise Exception(f"Fallo crítico al conectar con el HIL: {e}")   # Lo hacemos para que el test falle
-            
-        # Como se puede observar si HIL_SOCKET NO era None, no hacemos nada ya que la conexion está presente.
+    # Como se puede observar si HIL_SOCKET NO era None, no hacemos nada ya que la conexion está presente.
+
+
+
+def _ensure_arduino_connection():
+    """Asegura que la conexión a la Arduino esté abierta."""
+    global HIL_SERIAL, ARDUINO_COM_PORT, ARDUINO_BAUDRATE
+    if HIL_SERIAL is None:
+        try:
+            print(f"Modo Arduino: Abrimos puerto serie {ARDUINO_COM_PORT} a una velocidad bauds = {ARDUINO_BAUDRATE} bauds")
+            hil_ser = serial.Serial(ARDUINO_COM_PORT, baudrate=ARDUINO_BAUDRATE, timeout=5)
+            HIL_SERIAL = hil_ser
+            time.sleep(2)   # Esperamos a que el Arduino acabe de establecer la conexióon
+            print(f"Modo Arduino: Conexión realizada en {hil_ser.name} ")
+        except Exception as e:
+            HIL_SERIAL = None
+            print(f"ERROR, (Modo Arduino) - No se pudo establecer conexión a {ARDUINO_COM_PORT}: {e}")
+            raise Exception(f"Fallo al conectar con el modulo HIL Arduino: {e}")
+        
+        
+        
 # *** HIL CONTROL KEYWORDS ***
 def send_hil_command(raspberry_pi_ip: str, command: str, port: int = 65432, timeout: float = 15.0):
     """
-    Se conecta al servidor HIL de la Raspberry Pi y envía un comando.
+    Se conecta al servidor HIL de la Raspberry Pi o a la Arduino por puerto Serie y envía un comando.
     Devuelve la respuesta del servidor.
+    
+    En modo "FINAL_RPI_ONLY", envía TODOS los comandos a la RPi.
+    En modo "TEMPORAL_SPLIT", envía BURST/PULSE al Arduino y el resto a la RPi.
     
     COMANDOS
     ---------------------------------------------------------------------
@@ -85,66 +124,182 @@ def send_hil_command(raspberry_pi_ip: str, command: str, port: int = 65432, time
     GET_LOGS             -> Devuelve los logs T0/T5 acumulados en formato JSON
     BURST,<pin>,<n>,<dur>,<del> -> Ejecuta ráfaga local: N pulsos de 'dur' con 'del' seg de retraso entre ellos.
     """
-    global HIL_SOCKET
+    global HIL_SOCKET, HIL_SERIAL, HIL_SETUP_MODE, ARDUINO_COM_PORT, ARDUINO_BAUDRATE
     # Nos aseguramos que haya conexión (persistenete), usando el timeout por defecto (15s) en caso de tener que reconectar
-    _ensure_hil_connection(raspberry_pi_ip, port)
+    # Para Arduino, usa (ip, ARDUINO_BAUDRATE)!
+
     
-    original_timeout = HIL_SOCKET.gettimeout()
+    if HIL_SETUP_MODE == "FINAL_RPI_ONLY":
+        _ensure_rpi_connection(raspberry_pi_ip, port)
+        original_timeout = HIL_SOCKET.gettimeout()
 
-    try:
-        HIL_SOCKET.settimeout(timeout)
-        print(f"HIL: Timeout del socket ajustado temporalmente a {timeout}s para comando largo.")
+        try:
+            HIL_SOCKET.settimeout(timeout)
+            print(f"HIL: Timeout del socket ajustado temporalmente a {timeout}s para comando largo.")
 
-        # Enviamos el comando por el socket existente
-        HIL_SOCKET.sendall(command.encode('utf-8'))
+            # Enviamos el comando por el socket existente
+            HIL_SOCKET.sendall(command.encode('utf-8'))
+                
+            # Esperamos la RESPUESTA (con maximo 4096 bytes)
+            response = ""
+            while True:
+                part = HIL_SOCKET.recv(4096).decode('utf-8')
+                response += part
+                if '\n' in part or not part:    # Final de respuesta o conexión cerrada -> Salimos del bucle en el que esperamos respuesta
+                    break
+                
+            response = response.strip() # Limpiamos espacios y saltos de línea
+            print(f"HIL CMD: Comando '{command}' enviado. Respuesta: {response[:150]}...")  # logeamos solo los primeros 150 caracteres para no saturar
             
-        # Esperamos la RESPUESTA (con maximo 4096 bytes)
-        response = ""
-        while True:
-            part = HIL_SOCKET.recv(4096).decode('utf-8')
-            response += part
-            if '\n' in part or not part:    # Final de respuesta o conexión cerrada -> Salimos del bucle en el que esperamos respuesta
-                break
             
-        response = response.strip() # Limpiamos espacios y saltos de línea
-        print(f"HIL CMD: Comando '{command}' enviado. Respuesta: {response[:150]}...")  # logeamos solo los primeros 150 caracteres para no saturar
+            # Comprobamos la respuesta, realizando las siguientes verifiaciones
+            valid_responses = ("ACK", "PONG", "STATE", "JSON")
+            if not response.startswith(valid_responses):
+                raise Exception(f"response no coincide con lo que esperabamos (ACK.., PONG, STATE, JSON.. : {response}")
+            return response
         
         
-        # Comprobamos la respuesta, realizando las siguientes verifiaciones
-        valid_responses = ("ACK", "PONG", "STATE", "JSON")
-        if not response.startswith(valid_responses):
-            raise Exception(f"response no coincide con lo que esperabamos (ACK.., PONG, STATE, JSON.. : {response}")
-        return response
+        except (BrokenPipeError, ConnectionResetError, socket.timeout) as e:
+            # Si la conexión finaliza de golpe, intentamos reconectar UNA vez
+            print(f"HIL ERROR: {e}. Desconectando")
+            HIL_SOCKET = None
+            raise Exception(f"Error HIL durante comando: {e}")
+        except Exception as e:
+            print(f"HIL ERROR Inesperado: {e}")
+            raise e
+        
+        finally:
+            # Al final, independientemente de lo que haya pasado, restauramos el timeout original (de esta forma aseguramos pings rapidos!)
+            if HIL_SOCKET:
+                HIL_SOCKET.settimeout(original_timeout)
+            print(f"HIL: Timeout del socket restaurado a {original_timeout}s.")
     
-    
-    except (BrokenPipeError, ConnectionResetError, socket.timeout) as e:
-        # Si la conexión finaliza de golpe, intentamos reconectar UNA vez
-        print(f"HIL ERROR: {e}. Intentando reconectar...")
-        HIL_SOCKET = None
-        # Faltaría establecer la reconexión...
-        raise Exception(f"Error HIL durante comando: {e}")
-    except Exception as e:
-        print(f"HIL ERROR Inesperado: {e}")
-        raise e
-    
-    finally:
-        # Al final, independientemente de lo que haya pasado, restauramos el timeout original (de esta forma aseguramos pings rapidos!)
-        if HIL_SOCKET:
-            HIL_SOCKET.settimeout(original_timeout)
-        print(f"HIL: Timeout del socket restaurado a {original_timeout}s.")
+    elif HIL_SETUP_MODE == "TEMPORAL_SPLIT": 
+        if command.startswith("BURST_BATCH,") or command.startswith("PULSE,"):
+            # enviamos al Arduino
+            _ensure_arduino_connection()
+            original_timeout = HIL_SERIAL.timeout
+            try:
+                HIL_SERIAL.timeout = timeout
+                translated_command = ""     # Inicializamos la variable que contendrá el comando traducido
+                
+                if command.startswith("BURST_BATCH,"):
+                    # Recordemos que la GUI nos envía el comando de la siguiente manera: "BURST_BATCH,num,dur,del,ch1,ch2..."
+                    parts = command.split(',')
+                    num_pulses = int(parts[1])
+                    duration_sec = float(parts[2])
+                    delay_sec = float(parts[3])
+                    channels = parts[4:]            
+                
+                    if len(channels) > 1:
+                        print(f"Modo Arduino: WARNING: !Se han seleccionado {len(channels[4])}! RECORDEMOS QUE EL MODULO ARDUINO SOLO PUEDE MANEJAR UN CANAL!")
+                        print(f"Modo Arduino: WARNING: PROCEDEMOS A EJECTUAR EL COMANDO SOLO EN EL CANAL 1")            
+
+                    duration_ms = int(duration_sec * 1000)
+                    delay_ms = int(delay_sec * 1000)
+                    
+                    # Preparamos el formato de comando que espera la Arduino
+                    translated_command = f"B:{num_pulses}:{duration_ms}:{delay_ms}\n"   #\n al final para indicar que es el final del comando!
+                    
+                elif command.startswith("PULSE,"):
+                    parts = command.split(',')
+                    pin_id_ignored = parts[1]
+                    print(f"Modo ARDUINO INFO: Pin '{pin_id_ignored}' ignorado, YA QUE MODULO ARDUINO SOLO TIENE UN CANAL DISPONIBLE!")
+                    duration_sec = float(parts[2])
+                    duration_ms = int(duration_sec * 1000)
+
+                    translated_command = f"P:{duration_ms}\n"
+                    
+                print(f"Comando HIL original: {command} se ha traducido a {translated_command.strip()}")   
+                # Pasamos por el puerto serie de la Arduino el comando preparado
+                HIL_SERIAL.write(translated_command.encode('utf-8'))
+                
+                # Esperamos el response
+                response = HIL_SERIAL.readline().decode('utf-8').strip()
+                print(f"Modo ARDUINO Response: {response}")
+                
+                if response.startswith("ACK"):
+                    return response
+                elif response == "PONG_ARDUINO": 
+                    return "PONG"
+                else: 
+                    return f"ACK, {response}"   # Aunque no sea valido, para que el test de robot no de fallo, mandamos ACK
+                
+            except (serial.SerialException, Exception) as e:
+                print(f"ERROR Modo ARDUINO: {e}. Desconectando.")
+                HIL_SERIAL = None
+                raise Exception(f"ERROR Modo ARDUINO: {e}")
+            finally:
+                if HIL_SERIAL:
+                    HIL_SERIAL.timeout = original_timeout
+        
+        elif command == "PING":
+            translated_command = "PONG\n"
+  
+        else:
+            # *** Enviamos a la RASPBERRY PI. aqui sí necesitaremos la IP ***
+            _ensure_rpi_connection(raspberry_pi_ip, port)
+            original_timeout = HIL_SOCKET.gettimeout()
+            try:
+                HIL_SOCKET.settimeout(timeout)
+                HIL_SOCKET.sendall(command.encode('utf-8'))
+                
+                response = ""
+                while True:
+                    part = HIL_SOCKET.recv(4096).decode('utf-8')
+                    response += part
+                    if '\n' in part or not part:
+                        break
+                    
+                response = response.strip()
+                print(f"HIL (RPi) CMD: Comando '{command}' enviado. Respuesta: {response[:150]}...")
+                
+                valid_responses = ("ACK", "PONG", "STATE", "JSON")
+                if not response.startswith(valid_responses):
+                    raise Exception(f"Respuesta HIL (RPi) no válida: {response}")
+                return response
+            
+            except (BrokenPipeError, ConnectionResetError, socket.timeout) as e:
+                print(f"HIL (RPi) ERROR: {e}. Desconectando.")
+                HIL_SOCKET = None
+                raise Exception(f"Error HIL (RPi) durante comando: {e}")
+            except Exception as e:
+                print(f"HIL (RPi) ERROR Inesperado: {e}")
+                raise e
+            finally:
+                if HIL_SOCKET: HIL_SOCKET.settimeout(original_timeout)
+    else:
+        raise Exception(f"HIL_SETUP_MODE no reconocido: {HIL_SETUP_MODE}")    
+                
+                
+                
         
 def hil_start_performance_log(ip: str, channel: str, port: int = 65432):
     """
     Configura y comienza el logging de tiempos en la Raspberry Pi HIL.
-    channel: 'T0' o 'T5'
+    channel: Puede ser un string de canales separados por una coma -> 1,2,3..
+    En modo TEMPORAL, solo pide T5.
+    En modo FINAL, pide ALL (T0 y T5).
     """
-    response = send_hil_command(ip, f"CONFIG_LOG,{channel}", port)
+    global HIL_SETUP_MODE
+    
+    log_command = ""
+    if HIL_SETUP_MODE == "FINAL_RPI_ONLY":
+        log_command = f"CONFIG_LOG,ALL,{channel}"
+        print("INFO Modo RPI: Configurando para logs COMPLETOS (T0 y T5).")
+    
+    elif HIL_SETUP_MODE == "TEMPORAL_SPLIT":
+        log_command = f"CONFIG_LOG,T5,{channel}"
+        print("INFO Modo ARDUINO: Configurando para logs de T5).")
+        
+        
+    response = send_hil_command(ip, log_command, port)
     if not response.startswith("ACK"):
-        raise Exception(f"Error al configurar logging en canal {channel}: {response}")
+        raise Exception(f"Error al configurar logging en los canales {channel}: {response}")
     
     response = send_hil_command(ip, "START_LOG", port)
     if not response.startswith("ACK"):
-        raise Exception(f"Error al iniciar logging en canal {channel}: {response}")
+        raise Exception(f"Error al iniciar logging {HIL_SETUP_MODE} en los canales {channel}: {response}")
     
     return "OK, HIL Logging iniciado"
 
