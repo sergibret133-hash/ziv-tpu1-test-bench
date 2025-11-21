@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import json
 import os
+from tkinter import ttk
 
 def create_monitoring_tab(app_ref):
     """Crea y devuelve el CTkTabView completo para la sección 'MONITORING'."""
@@ -609,13 +610,30 @@ def _populate_verification_report_tab(app_ref, tab_frame):
     tab_frame.grid_columnconfigure(0, weight=1)
     tab_frame.grid_rowconfigure(2, weight=1)
 
+    # Frame transparent per organitzar els botons de carregar informe i el d'obrir widget del report de rendiment
+    header_frame = ctk.CTkFrame(tab_frame, fg_color="transparent")
+    header_frame.grid(row=0, column=0, padx=20, pady=10, sticky="ew")
+    
+    
     # Botón para cargar el archivo CSV
     load_button = ctk.CTkButton(
-        tab_frame, 
+        header_frame, 
         text="Cargar Informe de Verificación (.csv)...", 
-        command=app_ref.monitoring_controller._load_verification_report
+        command=app_ref.monitoring_controller._load_verification_report,
+        fg_color="#2464ad",
+        width=210
     )
-    load_button.grid(row=0, column=0, padx=20, pady=10, sticky="ew")
+    load_button.pack(side="right")
+    
+    # Botón para ver el informe de Rafaga (rendimiento)
+    bttn_burst_view = ctk.CTkButton(
+        header_frame,
+        text="Ver Último Informe Rafaga",
+        command=app_ref.monitoring_controller.view_lastest_burst_report,
+        fg_color="#E9A342",
+        width = 210
+    )
+    bttn_burst_view.pack(side="right", padx=(0, 10))
 
     # Etiqueta para mostrar el archivo actual
     app_ref.verification_report_file_label = ctk.CTkLabel(
@@ -658,3 +676,96 @@ def _switch_listener_view(app_ref, session_id):
     # Forzar una actualización del estado de los botones
     app_ref.run_button_state(is_running=app_ref.is_main_task_running)
     
+    
+    
+def open_burst_report_window(parent_app, header, rows, filename):
+    " Crea un widget flotante con una tabla para poder ver los resultados. Recibe 'parent_app' para poder centrar la ventana o hacerla modal sobre la app principal"
+    
+    # Creamos la ventana secundaria usnado parent_app
+    report_window = ctk.CTkToplevel(parent_app)
+    report_window.title(f"Report de Rendimiento: {filename}")
+    report_window.geometry("900x500")
+    
+    # hacemos que la ventana este en frente siempre
+    report_window.attributes("-topmost", True)
+    
+    # Titulo
+    title_var = ctk.StringVar(value=f"Archivo: {filename}")
+    label_title = ctk.CTkLabel(report_window, textvariable=title_var, font=("Roboto", 16, "bold"), text_color="black")
+    label_title.pack(pady=(15, 10))
+    
+    # Frame del contenedor
+    table_frame = ctk.CTkFrame(report_window, fg_color="transparent")
+    table_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+    
+    # Estil i taula
+    style = ttk.Style()
+    style.theme_use("clam")     # De esta manera podemos modificar colores de una forma mas facil
+    style.configure("Treeview", background="#2e2e2e", foreground="white", fieldbackground="#1D1D1D", rowheight=30, font=("Arial", 10))
+    # Estilo de la cabecera
+    style.configure("Treeview.Heading", background="#404040", foreground="white", relief="flat", font=("Arial", 10, "bold"))
+    # Cambio de color al pasar el raton
+    style.map("Treeview.Heading", background=[('active', "#555555")])
+    # Color de seleccion de fila
+    style.map('Treeview', background=[('selected',"#1d528f")])
+
+    # Creamos la tabla
+    columns = header
+    tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+    
+    # Configuramos cabecera y ancho de columnas
+    for col in columns:
+        tree.heading(col, text=col)
+        # Ajuste de ancho: Si es la columna más larga (timestamp) -> Le damos espacio
+        if "Proc." in col:
+            tree.column(col, width=80, anchor="center")
+        elif "Ciclo" in col:
+            tree.column(col, width=50, anchor="center")
+        else:
+            tree.column(col, width=110, anchor="center")
+            
+    # Insertamos datos con coloreado diferente en funcion del resultado
+    IDX_PROC_TX = 2
+    IDX_PROC_RX = 4
+    
+    # Etiquetas para el Treeview
+    tree.tag_configure('performance_fail', foreground="#f0be1b", font=("Arial", 10, "bold")) # Naranja 
+    tree.tag_configure('missing_data', foreground="#f34d00") # Rojo brillante
+    
+    for item in rows:
+        tags = []
+        if "MISSING" in item or "N/A" in item:
+            tags.append('missing_data')
+            
+        # Tratamos de verificar si los tiempos de delay (T2 - T1) y (T4 - T4) son los que se esperan (<=1ms). Si no es así, aparecerán en naranja (tal y como hemos configurado arriba)
+        try:
+            # Por cada elemento de la fila, nos quedamos con los que nos interesa verificar (de los cuales ya hemos guardado indice)
+            proc_tx_val = float(item[IDX_PROC_TX]) if item[IDX_PROC_TX] not in ["MISSING","N/A"] else 0.0   # Solo adquirimos el valor de la celda que nos interesa en caso de que exista. Si no existe -> Asignamos la variable a 0.
+            proc_rx_val = float(item[IDX_PROC_RX]) if item[IDX_PROC_RX] not in ["MISSING","N/A"] else 0.0
+            
+            # Para comprobar que no superen el 1ms 
+            if proc_tx_val > 1.0 or proc_rx_val > 1.0:
+                tags.append('performance_fail')     # Para que se vea en naranja, asignamos el tag performance_fail que hemos configurado para que nos aparezca en este color
+            
+        except ValueError:  # En caso de que no se pueda convertir a float
+            pass
+             
+        tree.insert("", "end", values=item, tags=tuple(tags))      # Cuando más adelante hagamos el tag_configure('warning', foreground="#ff4848"), ->
+        # -> aquellas filas en las que se haya detectado un MISSING o N/A, apareceran resaltadas en rojo.
+        
+    
+    # Scrollbars
+    vertsb = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+    horsb = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
+    tree.configure(yscrollcommand=vertsb.set, xscrollcommand=horsb.set)
+    
+    tree.grid(row=0, column=0, sticky="nsew")
+    vertsb.grid(row=0, column=1, sticky="ns")
+    horsb.grid(row=1, column=0, sticky="ew")
+    
+    table_frame.grid_rowconfigure(0, weight=1)
+    table_frame.grid_columnconfigure(0, weight=1)
+    
+    # Boton de Cerrar
+    close_bttn = ctk.CTkButton(report_window, text="cerrar", command=report_window.destroy, fg_color="red")
+    close_bttn.pack(pady=10)

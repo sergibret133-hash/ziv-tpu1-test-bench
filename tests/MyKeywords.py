@@ -441,9 +441,54 @@ def generate_performance_report_OLD (rpi_logs, traps_A_list, traps_B_list):
     return filename
 
 
+def _to_epoch(value):
+    """ Convierte el Timestamp de la RPI (que esta en ms) o el timestamp en string que viene de los traps SNMP de la TPU a segundos Epoch (que es un float) 
+    para poder restar más tarde tiempos sin problema """
+
+    if not value or value == "MISSING" or value == "N/A":
+        return None
+    
+    try:
+        if isinstance(value, int):  # Si es un int (timestamp de la RPI en ns)
+            return value / 1_000_000_000.0
+
+        elif isinstance(value, str):   # Si es el timestamp de la TPU
+            tpu_date = datetime.fromisoformat(value)    # Covertimos a objeto datetime
+            return tpu_date.timestamp()     # Nos quedamos con el timestamp
+
+    except Exception as e:
+        print(f"Error convirtiendo fecha '{value}': {e}")
+        return None
+    return None
+
+def find_closest_next(target_time, candidate_list, time_window=2.0):
+    """
+    Para evitar coger de la lista de traps aquellos que estén duplicados o fuera de secuencia.
+    Busca en candidate_list el valor de tiempo que este más cerca a target_time
+    Este valor tiene que cumplir que target_time <= valor < target_time + time_window
+    Si no encuentra valor devuelve 'None'
+    """
+    if target_time is None:
+        return None
+    
+    valid_candidates = []
+    for cand in candidate_list:
+        c_val = _to_epoch(cand)
+        if c_val is not None:
+            # Buscamos eventos que ocurrieron DESPUÉS del target (para evitar duplicados), pero dentro de la ventana (para no coger uno muy posterior que no cuadre con la sincronización por indice) 
+            if target_time <= c_val < (target_time + time_window):
+                valid_candidates.append(c_val)
+    
+    if not valid_candidates:
+        return None
+    
+    return min(valid_candidates)    # Devolvemos dentro de todos los valores que hemos adquirido en la ventana EL MAS CERCANO AL EVENTO ORIGINAL (target_time)
+
+
 def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
     """
-    Genera un informe correlacionando listas de traps con logs de RPi.
+    Genera un informe correlacionando listas de traps con logs de RPi mediante Correlación Temporal. De esta forma, evitamos traps duplicados o que lleguen muy tarde.
+    ¡IMPORTANTE! ¡LA RPI Y LA TPU TIENEN QUE ESTAR SINCRONIZADAS CONTRA EL MISMO RELOJ POR NTP!
     """
     # Preparamos un diccionario para clasificar los traps SNMP en función del tiempo al que pertenezcan
     traps_by_type = {"T1": [], "T2": [], "T3": [], "T4": []}
@@ -460,7 +505,13 @@ def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
         if t_type in ["T3", "T4"]:
             traps_by_type[t_type].append(t_time)
             
-    # Asumimos que los traps llegan ordenados. Aunque lo ideal sería ordenar las listas..
+    # Damos por hecho que los traps llegan ordenados. Aunque lo ideal sería ordenar las listas..
+    
+    
+    # Obtenemos las listas
+    t0_list = rpi_logs.get('t0_ns',[])
+    t5_list = rpi_logs.get('t5_ns',[])
+    
     
     # Generamos el informe CSV
     filename = f"test_results/burst_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -469,29 +520,89 @@ def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         # Cabecera
-        writer.writerow(["Ciclo", "T0 (Físico IN)", "T1 (Trap IN)", "T2 (Trap TX)", "T3 (Trap RX)", "T4 (Trap OUT)", "T5 (Físico OUT)", "Delta Total (ms)"])    
+        writer.writerow([
+            "Ciclo",
+            "Lat. Entrada (T1-T0)", "Proc. TX (T2-T1)",
+            "Canal/Loop (T3-T2)", 
+            "Proc. RX (T4-T3)", "Lat. Salida (T5-T4)",
+            "TOTAL (T5-T1)",
+            "T0 (Fís)", "T1 (Trap)", "T2 (Trap)", "T3 (Trap)", "T4 (Trap)", "T5 (Fis)"
+            ])    
         
+        # Antes de empezar a iterar sobre todas las listas, necesitamos saber num_cycles. 
+        # Usamos la lista de T1 como ancla del numero "correcto" (éste marcara la sincronización de tiempos posteriores T2, T3,..) 
         
-        num_cycles = len(rpi_logs.get('t0_ns', [])) # Utilizamos get() por si no llegaran logs, haríamos len de un vector vacio, y nos daría como resultado 0 en lugar de error
+        t1_epochs = []
+        for t in traps_by_type["T1"]:
+            val = _to_epoch(t)
+            if val: t1_epochs.append(val)
         
+        # Si cuando intentamos pasar a epochs T1 falla, intentamos usar T5 como salvaguarda.
+        num_cycles = len(t1_epochs) if t1_epochs else len(traps_by_type["T5"])
+            
         for i in range(num_cycles):
-            # Obtenemos T0 y T5
-            t0 = rpi_logs['t0_ns'][i] if i < len(rpi_logs['t0_ns']) else "MISSING"
-            t5 = rpi_logs['t5_ns'][i] if i < len(rpi_logs['t5_ns']) else "MISSING"
+            # ******** DATOS  ********
+            t1_val = t1_epochs[i] if i < len(t1_epochs) else None
             
-            # Obtenemos T1-T4
-            # Si llegamos a perder un trap en la red UDP, hay peliogro de que perdamos la correlación (tipico en SNMP)
-            t1 = traps_by_type["T1"][i] if i < len(traps_by_type["T1"]) else "MISSING_TRAP"
-            t2 = traps_by_type["T2"][i] if i < len(traps_by_type["T2"]) else "MISSING_TRAP"
-            t3 = traps_by_type["T3"][i] if i < len(traps_by_type["T3"]) else "MISSING_TRAP"
-            t4 = traps_by_type["T4"][i] if i < len(traps_by_type["T4"]) else "MISSING_TRAP"
+            # Buscamos T0 basado en T1 (hacia atras en el tiempo ya que T0 ocurre antes que T1) Como find_closest_next SOLO FUNCIONA HACIA DELANTE ->
+            # -> Lo implementamos aqui mismo
+            t0_val = None
+            if t1_val:
+                candidates_t0 = []
+                for raw_t0 in t0_list:
+                    val_t0 = _to_epoch(raw_t0)  # Convertimos a secs antes
+                    if val_t0 and (t1_val - 0.050) < val_t0 <= (t1_val + 0.005):  # Ventana hacia atras (desde val_t1)
+                        candidates_t0.append(val_t0)
+                if candidates_t0:
+                    t0_val = max(candidates_t0)    # Nos queremos quedar con el valor más proximo a T1 (para no coger anteriores..), que es el maximo de los que ha encontrado
+                    
             
-            # Calculamos la latencia total
-            delta = "N/A"
-            if isinstance(t0, int) and isinstance(t5, int):     # Comprobamos en primer lugar que los logs existan
-                delta = round((t5 - t0) / 1_000_000.0, 3) # ns a ms con redondeo
+            
+            # find_closest_next ya aplica el _to_epoch. Por lo que obtenemos los valores convertidos a ns ya
+            # Buscamos T2 basado en T1 (Ventana de 1.5s adelante)
+            t2_val = find_closest_next(t1_val, traps_by_type["T2"], 0.020)
+            
+            # Buscamos T3 basado en T2. Si el find_closest_next anterior hubiera fallado partimos de T1 para no romper con la sincronizacion
+            ref_for_t3 = t2_val if t2_val else t1_val
+            t3_val = find_closest_next(ref_for_t3, traps_by_type["T3"], 0.060)
+            
+            # Buscamos T4 basado en T3. Si el find_closest_next anterior hubiera fallado partimos de T2 para no romper con la sincronizacion
+            ref_for_t4 = t3_val if t3_val else ref_for_t3
+            t4_val = find_closest_next(ref_for_t4, traps_by_type["T4"], 0.020)
+            
+            # Buscamos T5 (Físico RPi) basado en T4. Si el find_closest_next anterior hubiera fallado partimos de T3 para no romper con la sincronizacion
+            # Nota: T5 es int (ns), la función _to_epoch dentro de find_closest lo maneja
+            ref_for_t5 = t4_val if t4_val else ref_for_t4
+            t5_val = find_closest_next(ref_for_t5, t5_list, 0.030)
+            
 
-            writer.writerow([i+1, t0, t1, t2, t3, t4, t5, delta])
+                
+            # ********* CALCULOS DIFERENCIA DE TIEMPO/DELAYS *********
+            def calc_delta(end, start):
+                if end is not None and start is not None:
+                    return round((end - start) * 1000, 3)
+                return "N/A"    # Si alguno de los parametros pasado (tiempo "end" o "start") no existe devolvemos N/A
+            
+            input_lat = calc_delta(t1_val, t0_val)
+            tx_proc = calc_delta(t2_val, t1_val)
+            ch_delay = calc_delta(t3_val, t2_val)
+            rx_proc = calc_delta(t4_val, t3_val)
+            output_lat = calc_delta(t5_val, t4_val)
+            total_delay = calc_delta(t5_val, t1_val)    # DE MOMENTO DEJO COMO START T1 EN LUGAR DE T0, PUESTO QUE ESTAMOS ACTIVANDO LOS INPUTS DE FORMA TEMPORAL CON EL MÓDULO ARDUINO
+            
+            # formatamos los valores convertidos con epoch a sec
+            t0_f = f"{t0_val:.3f}" if t0_val else "MISSING"
+            t1_f = f"{t1_val:.3f}" if t1_val else "MISSING"
+            t2_f = f"{t2_val:.3f}" if t2_val else "MISSING"
+            t3_f = f"{t3_val:.3f}" if t3_val else "MISSING"
+            t4_f = f"{t4_val:.3f}" if t4_val else "MISSING"
+            t5_f = f"{t5_val:.3f}" if t5_val else "MISSING"
+            
+            
+            writer.writerow([i+1,
+                             input_lat, tx_proc, ch_delay, rx_proc, output_lat, total_delay,
+                             t0_f, t1_f, t2_f, t3_f, t4_f, t5_f
+                             ])
             
     print(f"BURST REPORT generado: {filename}")
     return filename

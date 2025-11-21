@@ -125,12 +125,12 @@ T5_PIN_MAP = {
 def t0_callback_handler(channel, timestamp):
     "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T0"
     if logging_active:
-        t0_logs.append(timestamp)
+        t0_logs.append(time.time_ns())
         
 def t5_callback_handler(channel, timestamp):
     "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T5"
     if logging_active:
-        t5_logs.append(timestamp)
+        t5_logs.append(time.time_ns())
 
 # HILO DE SONDEO (para gpiod_v2) ---
 def _alert_poll_loop(channel_id, request_obj, callback):

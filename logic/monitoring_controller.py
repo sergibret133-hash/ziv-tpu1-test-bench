@@ -7,6 +7,8 @@ import json
 from tkinter import filedialog, messagebox
 import time
 import re
+import glob
+
 
 import csv
 import os
@@ -536,3 +538,36 @@ class MonitoringController:
             return f"Error al parsear el archivo CSV: {e}"
 
         return "\n".join(output_text)
+    
+    def view_lastest_burst_report(self):
+        "Busca el último CSV de ráfaga generado y envía los datos a la GUI"
+        try:
+            list_of_files = glob.glob(os.path.join("test_results", "burst_report_*.csv"))   # Busca todos los archivos que haya en el directorio de nuestro disco duro Y NOS DEVUELVE UNA LISTA. 
+            #os.path.loin es para separar el directorio por la barra \ / necesaria para cada SO
+            if not list_of_files:
+                self.app_ref.gui_queue.put(('main_status', "No se encontraron informes de ráfaga.", "orange"))
+                return
+            
+            latest_file = max(list_of_files, key=os.path.getctime)  # getctime nos devuelve el timestamp de la creacion de un archivo. COn la función max, nos devuelve el archivo con fecha timestamp más "grande"(más reciente)
+            
+            # Leemos el .csv
+            header = []
+            data_rows = []
+
+            with open(latest_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                try:
+                    header = next(reader) # Leemos la primera fila, que es la cabecera
+                    for row in reader:  # Seguimos leyendo y guardando en data_rows el resto de filas
+                        data_rows.append(row)
+                except StopIteration:
+                    pass
+            
+            # Enviamos a la cola de la GUI para que abra la ventana
+            # Enviamos: (TIPO_MENSAJE, session_id en este caso no lo necesitamos (ponemos None), header, rows, filename)
+            self.app_ref.gui_queue.put(('show_burst_report_window', None, header, data_rows, os.path.basename(latest_file)))
+            self.app_ref.gui_queue.put(('main_status', f"Abriendo informe: {os.path.basename(latest_file)}", "green"))
+            
+        except Exception as e:
+            print(f"Error al abrir reporte: {e}")
+            self.app_ref.gui_queue.put(('main_status', f"Error abriendo reporte: {e}", "red"))

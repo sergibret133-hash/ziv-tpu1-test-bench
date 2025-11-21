@@ -16,7 +16,7 @@ def _create_session_frame(app_ref, parent_frame, session_id):
     
     # Label "IP" y Entrada para la IP
     ctk.CTkLabel(frame, text="IP:").grid(row=1, column=0, padx=(10, 2), pady=5, sticky="w")
-    entry_ip = ctk.CTkEntry(frame, placeholder_text="10.212.40.31")
+    entry_ip = ctk.CTkEntry(frame, placeholder_text="10.212.42.231")
     entry_ip.grid(row=1, column=1, columnspan=2, padx=(0, 10), pady=5, sticky="ew")
 
     # Botones de Conexión
@@ -108,5 +108,5 @@ def create_sidebar(app_ref):
     except FileNotFoundError:
         print("Logo file ('logo.png') not found. Skipping logo display.")
 
-    app_ref.version_label = ctk.CTkLabel(app_ref.sidebar_frame, text="v2.0 - Sesiones Multiples", anchor="w")
+    app_ref.version_label = ctk.CTkLabel(app_ref.sidebar_frame, text="v3.0 - HIL", anchor="w")
     app_ref.version_label.grid(row=13, column=0, padx=20, pady=(10, 20))

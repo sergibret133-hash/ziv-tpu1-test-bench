@@ -29,6 +29,10 @@ from tkinter import filedialog
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # Subimos para llegar a la raíz del proyecto
 project_root = os.path.dirname(current_dir)
+
+# para el widget Treeview (Tabla)
+from tkinter import ttk
+
 # ruta a la carpeta tests
 tests_dir = os.path.join(project_root, 'tests')
 
@@ -404,7 +408,9 @@ class ModernTestRunnerApp(ctk.CTk):
                     self._update_debug_log(message[1])
                 elif msg_type == 'scheduler_log':
                     ui_tab_scheduler._update_scheduler_log(self, message[1], message[2])       
-                    
+                elif msg_type == 'show_burst_report_window':
+                    # message[2] = header, message[3] = rows, message[4] = filename
+                    ui_tab_monitoring.open_burst_report_window(self, message[2], message[3], message[4])      # Omitimos message[1] ya que no necesitamos el session_id en este caso
                 
                 # *** MENSAJES DE DATOS (con session_id)*** Consideraremos a partir de aqui message[1] como session_id
                 else:
@@ -1044,3 +1050,5 @@ class ModernTestRunnerApp(ctk.CTk):
             ui_tab_scheduler._select_task_in_sequence(self, index_to_select)
         except Exception as e:
             print(f"ERROR: No se pudo seleccionar la tarea en la GUI: {e}")
+            
+            
