@@ -341,6 +341,7 @@ void executeRemoteBurst(long num_pulses, long duration_ms, long delay_ms) {
 //         }
 //     Ultimo_Estado_Pulsador_Rotary = HIGH;
 //        if (BotonRotary == 1) {
+
 //               // my_lcd.Print_String(" ",300, 75);
 //               // my_lcd.Print_String(" ",300, 100);
 //               // my_lcd.Print_String("<",300, 50);  

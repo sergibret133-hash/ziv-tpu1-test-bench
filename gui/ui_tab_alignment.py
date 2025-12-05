@@ -188,25 +188,37 @@ def _populate_input_activation_tab(app_ref, tab_frame):
     hil_frame = ctk.CTkFrame(tab_frame)
     hil_frame.pack(pady=(10, 5), padx=10, fill="x", anchor="n")
     
-    hil_label = ctk.CTkLabel(hil_frame, text="Controlador HIL con Raspberry Pi", font=ctk.CTkFont(weight="bold"))
+    hil_label = ctk.CTkLabel(hil_frame, text="Controlador HIL con Raspberry Pi (o Arduino)", font=ctk.CTkFont(weight="bold"))
     hil_label.pack(side="left", padx=(10, 5))
 
     # Guardamos la entrada de IP en 'app_ref.rpi_ip_entry' para que el controlador la lea
-    app_ref.rpi_ip_entry = ctk.CTkEntry(hil_frame, placeholder_text="IP de Raspberry Pi")
+    app_ref.rpi_ip_entry = ctk.CTkEntry(hil_frame, placeholder_text="IP de Raspberry Pi (o COMX Arduino)")
     app_ref.rpi_ip_entry.pack(side="left", padx=5, fill="x", expand=True)
 
-
+    app_ref.header_container = ctk.CTkFrame(tab_frame, fg_color="transparent", height=0)
+    app_ref.header_container.pack(fill="x", anchor="n", pady=0) # Padding 0 para que si está vacío no ocupe espacio
+    
     # *** Cabecera Activación de Entradas  ***
-    input_activation_frame = ctk.CTkFrame(tab_frame)
-    input_activation_frame.pack(pady=5, padx=10, fill="x", anchor="n")
+    app_ref.sw_header_frame = ctk.CTkFrame(app_ref.header_container, fg_color="transparent")   # guardamos el frame en app_ref para poderlo ocultar o mostar más tarde desde otra funcion
+    app_ref.sw_header_frame.pack(pady=5, padx=10, fill="x", anchor="n")
 
-    input_activation_header_frame = ctk.CTkFrame(input_activation_frame, fg_color="transparent")
-    input_activation_header_frame.pack(fill="x", padx=10, pady=(5,0))
+    # En verdad no haría falta crear este nuevo frame dentro de app_ref.sw_header_frame y podriamos usar este ultimo para incluir el botond e consultar estado etc.
 
-    app_ref.retrieve_inputs_button = ctk.CTkButton(input_activation_header_frame, text="Consultar Estado de Entradas", width=150, command=app_ref.alignment_controller._run_retrieve_inputs_state_thread)
+    app_ref.retrieve_inputs_button = ctk.CTkButton(
+        app_ref.sw_header_frame,
+        text="Consultar Estado de Entradas",
+        width=200,
+        command=app_ref.alignment_controller._run_retrieve_inputs_state_thread
+    )
+    
     app_ref.retrieve_inputs_button.pack(side="left")
 
-    app_ref.input_activation_status_label = ctk.CTkLabel(input_activation_header_frame, text="Estado: Desconocido", text_color="gray", font=ctk.CTkFont(weight="bold"))
+    app_ref.input_activation_status_label = ctk.CTkLabel(
+        app_ref.sw_header_frame,
+        text="Estado: Desconocido",
+        text_color="gray",
+        font=ctk.CTkFont(weight="bold")
+        )
     app_ref.input_activation_status_label.pack(side="left", padx=20)
 
     # Contenedor para la rejilla de checkboxes. _update_input_activation_display lo rellenará de forma dinámica.
@@ -231,10 +243,17 @@ def _populate_input_activation_tab(app_ref, tab_frame):
         if mode == "Software":
             software_controls_frame.pack(fill="x", expand=True)
             hardware_controls_frame.pack_forget()
+            app_ref.sw_header_frame.pack(pady=5, padx=10, fill="x", anchor="n") # Mostramos la cabecera de Soft en la que aparece el boton de consultar entradas
+            
+            _restore_software_view(app_ref)     # Restauramos los datos de entradas disponibles, estado de activación etc siempre que hubiera datos antes
+            
         elif mode == "Hardware":
             software_controls_frame.pack_forget()
             hardware_controls_frame.pack(fill="x", expand=True)
-
+            app_ref.sw_header_frame.pack_forget() # Ocultamos la cabecera de Soft (botón consultar) ya que no aplica en este caso
+            
+            _load_hardware_channels_view(app_ref)       # Cargamos los canales fisicos por defecto
+            
     # *** Selector para el modo ***
     mode_selector = ctk.CTkSegmentedButton(
         controls_frame,
@@ -291,8 +310,8 @@ def _populate_input_activation_tab(app_ref, tab_frame):
     hw_label_duration = ctk.CTkLabel(hardware_controls_frame, text="Duración (s):", anchor="w")
     hw_label_duration.grid(row=1, column=0, padx=10, pady=5, sticky="w")
 
-    app_ref.hil_pulse_duration_entry = ctk.CTkEntry(hardware_controls_frame, placeholder_text="ej. 0.5", width=100)
-    app_ref.hil_pulse_duration_entry.insert(0, "0.5")
+    app_ref.hil_pulse_duration_entry = ctk.CTkEntry(hardware_controls_frame, placeholder_text="ej. 1.0", width=100)
+    app_ref.hil_pulse_duration_entry.insert(0, "1.0")
     app_ref.hil_pulse_duration_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
     
     # Delay
@@ -313,21 +332,71 @@ def _populate_input_activation_tab(app_ref, tab_frame):
     mode_selector.set("Software")
 
 
+def _clear_checkboxes(app_ref):
+    "Borra todos los checkboxes de la zona de scroll"
+    for widget in app_ref.input_checkbox_scroll_frame.winfo_children():
+        widget.destroy()    # Borramos cada uno de los elementos checkboxes VISUALES que se encuentran en el frame
+    app_ref.input_activation_checkboxes.clear()    # Borramos todos los valores, '1' y '0' que guardamos de los estados de cada checkbox (esto es lo que usamos en alignment_controller) 
 
 
-def _update_input_activation_display(app_ref, state, input_info):
-    """Dynamically builds the checkboxes for input activation.
+def _load_hardware_channels_view(app_ref):
+    " Crea automaticamente checkboxes para canales HIL "
+    _clear_checkboxes(app_ref)      # Borrado previo
+    
+    # Definimos 8 canales fisicos por si conectamos mas de una IPTU, ya sea en el mismo equipo TPU o en diferentes
+    num_hw_channels = 8 
+    cols = 4
+    
+    app_ref.input_checkbox_scroll_frame.configure(label_text="Entradas Físicas (Hardware RPi/Arduino)")
+
+    for i in range(num_hw_channels):
+        channel_name = f"Canal físico {i+1}"
+        checkbox = ctk.CTkCheckBox(app_ref.input_checkbox_scroll_frame, text=channel_name)
+        
+        row = i // cols
+        col = i % cols
+        checkbox.grid(row=row, column=col, padx=10, pady=5, sticky="w")
+    
+        app_ref.input_activation_checkboxes.append(checkbox)
+        
+
+def _restore_software_view(app_ref):
+    " Trata de restaurar la vista de software de los datos de app.py"
+    _clear_checkboxes(app_ref)
+    app_ref.input_checkbox_scroll_frame.configure(label_text="Entradas Lógicas")
+    
+    # Recuperamos datos en la sesion activa
+    session_id = app_ref.active_session_id
+    if session_id in app_ref.session_gui_data:   # Comprobamos que session_id exista en el diccionario de  datos guardados de las sesiones (para confirmar que no estemos en una sesion que no exista ya porque se haya cerrado por ejemplo)
+        data = app_ref.session_gui_data[session_id]
+        
+        input_info = data.get('input_info')
+        input_state = data.get('input_activation_state')
+        
+        if input_info:
+            _update_input_activation_display(app_ref, input_state, input_info, force=True)
+            
+        else:
+            ctk.CTkLabel(app_ref.input_checkbox_scroll_frame, text="Haga clic en 'Consultar Estado de Entradas' para cargar datos.").pack(pady=10)
+    
+    else:
+        ctk.CTkLabel(app_ref.input_checkbox_scroll_frame, text="No se encontraron datos de la sesión activa")
+        
+
+def _update_input_activation_display(app_ref, state, input_info, force=False):
+    """Dynamically builds the checkboxes for input activation (SOFT MODE!).
         state - dict with 'inputs' list VALUE STATE and 'duration' (str) or None if inactive.
         input_info - list of input NAMES (NOT states)"""
-    # Cancelar temporizador previo si existe
+    if not force and not app_ref.sw_header_frame.winfo_ismapped():    # IMPORTANTE, como no queremos queremos que esta función sobreescriba y actualice los datos cuando estemos en modo hardware, Tenemos que comprobar si NO estamos en modo SOFTWARWE (significa que estamos en modo HARDWARE!) ->>
+        return # MODO HARDWARE -> IGNORAMOS UPDATE   
+        
+    # Cancelamos el temporizador previo (si existe)
     if app_ref.activation_timer:
         app_ref.after_cancel(app_ref.activation_timer)
         app_ref.activation_timer = None
     
-    # Limpiar checkboxes previos
-    for widget in app_ref.input_checkbox_scroll_frame.winfo_children():
-        widget.destroy()
-    app_ref.input_activation_checkboxes.clear()
+    # Limpiamos los checkboxes previos
+    _clear_checkboxes(app_ref)
 
     # Actualizamos la etiqueta de estado con el temporizador en caso de ser activado
     if state:

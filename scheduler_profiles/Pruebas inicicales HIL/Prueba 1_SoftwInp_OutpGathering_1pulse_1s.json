@@ -1,0 +1,47 @@
+[
+    {
+        "type": "Ejecutar Test",
+        "name": "Input Activation (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "InputActivation.robot",
+        "vars": "ACTIVATE_DEACTIVATE:1 DURATION:0 INPUTS_LIST:[1,0]",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Send Input Command (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Tests.robot",
+        "vars": "RASPBERRY_PI_IP:COM3 COMMAND_STR:GET_OUTPUT,1",
+        "param": ""
+    },
+    {
+        "type": "Pausa (segundos)",
+        "name": "PAUSA: 1 segundos",
+        "on_fail": "Detener secuencia",
+        "session_id": null,
+        "file": "",
+        "vars": "",
+        "param": 1
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Input Activation (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "InputActivation.robot",
+        "vars": "ACTIVATE_DEACTIVATE:0 DURATION:0 INPUTS_LIST:[0,0]",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Send Input Command (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Tests.robot",
+        "vars": "RASPBERRY_PI_IP:COM3 COMMAND_STR:GET_OUTPUT,1",
+        "param": ""
+    }
+]

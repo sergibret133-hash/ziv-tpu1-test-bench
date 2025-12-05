@@ -1,0 +1,11 @@
+[
+    {
+        "type": "Ejecutar Test",
+        "name": "Escenario 4: Prueba de Sensibilidad PWM (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Tests.robot",
+        "vars": "CHANNELS_TO_TEST:1 START:50 END:3",
+        "param": ""
+    }
+]

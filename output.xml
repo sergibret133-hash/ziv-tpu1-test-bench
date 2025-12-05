@@ -1,32 +1,91 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<robot generator="Robot 7.2.2 (Python 3.9.12 on win32)" generated="2025-10-21T14:41:58.919407" rpa="false" schemaversion="5">
-<suite id="s1" name="Module IBTU FFT" source="c:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\tests\Module_IBTU_FFT.robot">
-<kw name="Conectar A Navegador Existente" owner="BrowserManager" type="SETUP">
-<kw name="Close All Browsers" owner="SeleniumLibrary">
-<doc>Closes all open browsers and resets the browser cache.</doc>
-<status status="PASS" start="2025-10-21T14:42:00.107557" elapsed="0.001000"/>
+<robot generator="Robot 7.2.2 (Python 3.9.12 on win32)" generated="2025-12-05T08:09:38.533727" rpa="false" schemaversion="5">
+<suite id="s1" name="Recue Data" source="c:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\tests\Recue_Data.robot">
+<test id="s1-t1" name="Rescatar Datos De La Noche" line="10">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n *** INICIANDO RESCATE DE DATOS ***</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.074003" elapsed="0.000000"/>
 </kw>
-<msg time="2025-10-21T14:42:00.109551" level="FAIL">Suite Setup falló: [Errno 2] No such file or directory: 'C:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\session.json'</msg>
-<doc>Conecta a una sesión de navegador existente (sin crear nuevas ventanas).</doc>
-<status status="FAIL" start="2025-10-21T14:42:00.106562" elapsed="0.049780">Suite Setup falló: [Errno 2] No such file or directory: 'C:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\session.json'</status>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Intentando descargar logs de la RPi...</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.089739" elapsed="0.002957"/>
 </kw>
-<test id="s1-t1" name="Assign Reception Operation Mode" line="119">
-<tag>robot:exit</tag>
-<status status="FAIL" start="2025-10-21T14:42:00.157539" elapsed="0.002000">Test execution stopped due to a fatal error.</status>
+<kw name="Hil Get Logs Force" owner="MyKeywords">
+<msg time="2025-12-05T08:09:39.642553" level="INFO">DEBUG: Intentando forzar descarga de logs (con el comando GET_LOGS)..
+HIL (Persistente): Abriendo nueva conexión a 10.212.42.42:65432...
+HIL Persistente: Conexion realizada
+HIL: Timeout del socket ajustado temporalmente a 15.0s para comando largo.
+HIL CMD: Comando 'GET_LOGS' enviado. Respuesta: JSON,{"channels": "", "t0_ns": [1764861775951327653, 1764861776951602414, 1764861777951898767, 1764861778952198120, 1764861779952465622, 1764861780952...
+HIL: Timeout del socket restaurado a 15.0s.
+DEBUG: ¡ÉXITO! Logs rescatados de la RAM de la RPi:
+   -&gt; Eventos T0 (Inicio): 43506
+   -&gt; Eventos T5 (Fin):    87282</msg>
+<msg time="2025-12-05T08:09:39.676564" level="INFO">${rpi_logs} = {'channels': '', 't0_ns': [1764861775951327653, 1764861776951602414, 1764861777951898767, 1764861778952198120, 1764861779952465622, 1764861780952746549, 1764861781953032699, 1764861782953312904, 17648...</msg>
+<var>${rpi_logs}</var>
+<arg>${RASPBERRY_PI_IP}</arg>
+<arg>${HIL_PORT}</arg>
+<doc>Fuerza la descarga de los logs (con el comando GET_LOGS) sin intentar detener la grabación primero.
+Para rescates de logs cuando el servidor no acaba de funcionar bien o nos da error al tratar de conectarnos de nuevo.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.097686" elapsed="0.578878"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Recuperando Traps de la memoria del PC...</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.676564" elapsed="0.010139"/>
+</kw>
+<kw name="Create List" owner="BuiltIn">
+<msg time="2025-12-05T08:09:39.693974" level="INFO">${empty_list} = []</msg>
+<var>${empty_list}</var>
+<doc>Returns a list containing given items.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.691257" elapsed="0.003019"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Generando CSV Maestro...</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.702585" elapsed="0.002486"/>
+</kw>
+<kw name="Generate Burst Performance Report" owner="MyKeywords">
+<msg time="2025-12-05T08:30:48.433021" level="INFO">INFO REPORT: Usando T0 como ancla. num_cycles = 43506 = len(t0_list)
+BURST REPORT generado: test_results/burst_report_20251205_080939.csv</msg>
+<msg time="2025-12-05T08:30:48.501461" level="INFO">${csv_path} = test_results/burst_report_20251205_080939.csv</msg>
+<msg time="2025-12-05T08:30:48.501461" level="INFO">${t3_traps_count} = 0</msg>
+<msg time="2025-12-05T08:30:48.502463" level="INFO">${t4_traps_count} = 0</msg>
+<var>${csv_path}</var>
+<var>${t3_traps_count}</var>
+<var>${t4_traps_count}</var>
+<arg>${rpi_logs}</arg>
+<arg>${empty_list}</arg>
+<arg>${empty_list}</arg>
+<doc>Genera un informe correlacionando listas de traps con logs de RPi mediante Correlación Temporal. De esta forma, evitamos traps duplicados o que lleguen muy tarde.
+¡IMPORTANTE! ¡LA RPI Y LA TPU TIENEN QUE ESTAR SINCRONIZADAS CONTRA EL MISMO RELOJ POR NTP!
+Filtramos solo para activaciones.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.709181" elapsed="1268.796423"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n *** ¡RESCATE COMPLETADO! ***</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-05T08:30:48.566364" elapsed="0.022883"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Informe guardado en: ${csv_path}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-05T08:30:48.589247" elapsed="0.000000"/>
+</kw>
+<doc>NO ENVÍA COMANDOS. Solo recupera los logs que están en memoria de la RPi y genera el CSV.</doc>
+<status status="PASS" start="2025-12-05T08:09:39.074003" elapsed="1269.529516"/>
 </test>
-<doc>This is a basic test</doc>
-<status status="FAIL" start="2025-10-21T14:41:58.935991" elapsed="1.230437">Suite setup failed:
-Suite Setup falló: [Errno 2] No such file or directory: 'C:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\session.json'</status>
+<status status="PASS" start="2025-12-05T08:09:38.545970" elapsed="1270.090151"/>
 </suite>
 <statistics>
 <total>
-<stat pass="0" fail="1" skip="0">All Tests</stat>
+<stat pass="1" fail="0" skip="0">All Tests</stat>
 </total>
 <tag>
-<stat info="combined" combined="NOT robot:exit" pass="0" fail="0" skip="0">NOT robot:exit</stat>
 </tag>
 <suite>
-<stat name="Module IBTU FFT" id="s1" pass="0" fail="1" skip="0">Module IBTU FFT</stat>
+<stat name="Recue Data" id="s1" pass="1" fail="0" skip="0">Recue Data</stat>
 </suite>
 </statistics>
 <errors>

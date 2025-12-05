@@ -82,42 +82,41 @@ pin_states = {}
 
 
 # Lógica de los Relés
-# -----------------------------------
-# Teniendo en cuenta que los relés son Activos a Nivvel bajo ->
-#   - Poner el pin GPIO en 0 (0V) -> CIERRA el relé (ON)
-#   - Poner el pin GPIO en 1 (3.3V) -> ABRE el relé (OFF)
-RELAY_ON_STATE = Value.INACTIVE
-RELAY_OFF_STATE = Value.ACTIVE
+# Teniendo en cuenta que configuramos los relés como Activos Nivel Bajo para utilizar los optoacopladores que funcionan por activos nivel bajo también EN LA SALIDA DE LOS MISMOS ->
+#   - Ponemos el pin GPIO en 1 (3.3V) -> ACTIVA OPTO (PRODUCE '0' EN LA SALIDA DEL OPTO) -> CIERRA el relé (ON)
+#   - Ponemos el pin GPIO en 0 (0V) -> DESACTIVA OPTO (PRODUCE '1' EN LA SALIDA DEL OPTO) -> ABRE el relé (OFF)
+RELAY_ON_STATE = Value.ACTIVE
+RELAY_OFF_STATE = Value.INACTIVE
 
 # Mapeo de pines GPIO
 # comando : pin_GPIO 
 PIN_MAP = {
-    '1': 17,  # Pin 11 Físico
-    '2': 27,  # Pin 13 Físico
-    '3': 22,  # Pin 15 Físico
-    '4': 5,  # Pin 29 Físico
-    '5': 6,   # Pin 31 Físico
-    '6': 13,  # Pin 33 Físico
+    '1': 17,  # Fila 1 (IO17)
+    '2': 18,  # Fila 1 (IO18)
+    '3': 24,  # Fila 2 (IO24)
+    '4': 25,  # Fila 2 (IO25)
+    '5': 5,   # Fila 2 (IO5)
+    '6': 6,   # Fila 2 (IO6)
 }
 
 # Pines de FEEDBACK T0 (Entradas físicas desde optoacoplador en paralelo a la entrada TPU)
 T0_PIN_MAP = {
-    '1': 4,   # Físico 7
-    '2': 18,  # Físico 12
-    '3': 23,  # Físico 16
-    '4': 24,  # Físico 18
-    '5': 25,  # Físico 22
-    '6': 8,   # Físico 24 (SPI)
+    '1': 23,  # Fila 3 (IO23)
+    '2': 22,  # Fila 3 (IO22)
+    '3': 12,  # Fila 3 (IO12)
+    '4': 20,  # Fila 3 (IO20)
+    '5': 19,  # Fila 3 (IO19)
+    '6': 16,  # Fila 2 (IO16 - Extremo derecho
 }
 
 # Pines de Recepción de Orden Salida T5 (Entradas físicas RPI conectadas a Relés SSR de salida de la IPTU)
 T5_PIN_MAP = {
-    '1': 26,  # Físico 37
-    '2': 19,   # Físico 35
-    '3': 16,  # Físico 36
-    '4': 20,  # Físico 38
-    '5': 21,  # Físico 40
-    '6': 12,  # Físico 32
+    '1': 4,   # Fila 4 (IO4)
+    '2': 27,  # Fila 4 (IO27)
+    '3': 21,  # Fila 4 (IO21)
+    '4': 13,  # Fila 4 (IO13)
+    '5': 26,  # Fila 4 (IO26)
+    '6': 2,   # Fila 4 (SDA - GPIO 2) *Ver nota abajo
 }
 
 
@@ -334,7 +333,7 @@ def parse_and_execute(command):
                 
                 # DETERMINAMOS EL MODO en el que funcionará nuestro sistema y los canales de log
                 log_mode = "ALL"
-                if parts[1] in ["T0", "T5", "All"]:
+                if parts[1] in ["T0", "T5", "ALL"]:
                     log_mode = parts[1]
                     channel_ids = parts[2:]
                     print(f"Modo log detectado a: {log_mode}")
@@ -351,8 +350,8 @@ def parse_and_execute(command):
                 # Config de T0: Rising -Edge, PULL-DOWN
                 settings_t0 = gpiod.LineSettings(
                 direction=Direction.INPUT,
-                edge_detection=Edge.RISING,
-                bias=Bias.PULL_DOWN
+                edge_detection=Edge.FALLING,
+                bias=Bias.PULL_UP
                 )
                 
                 
@@ -431,6 +430,7 @@ def parse_and_execute(command):
             return f"ACK, Logging detenido. Registros T0: {len(t0_logs)}, Registros T5: {len(t5_logs)}"
             
         elif command == "GET_LOGS":
+            print(f"DEBUG: Preparando logs... T0: {len(t0_logs)} eventos, T5: {len(t5_logs)} eventos.")
             # Devolvemos los logs en formato JSON
             logs_data = {
                 "channels": ",".join(current_log_channels),
@@ -523,6 +523,61 @@ def parse_and_execute(command):
             except (IndexError, ValueError):
                 return "ERROR, Comando BURST_BATCH invalido. El formato debe ser: BURST_BATCH,<num_pulses>,<duration_s>,<delay>,<pin1>,<pin2>,..."
             
+            
+            
+        elif command.startswith("GET_INPUT,"):
+            parts = command.split(',')
+            if len(parts) == 2:
+                pin_id = parts[1]
+                if pin_id not in T0_PIN_MAP:
+                    return f"ERROR, Pin ID '{pin_id}' no existe en T0_PIN_MAP."
+                
+                pin_bcm = T0_PIN_MAP[pin_id]
+
+                if pin_id in T0_REQUESTS:
+                    try:
+                        req = T0_REQUESTS[pin_id]
+                        state = req.get_value(pin_bcm)
+                        
+                        # Lógica de retorno (Invertida porque Pull-Up + Active Low)
+                        if state == Value.INACTIVE: 
+                            return "STATE,HIGH"
+                        else:
+                            return "STATE,LOW"
+                    except Exception as e:
+                            return f"ERROR, Fallo leyendo pin ocupado: {e}"
+                    
+                    
+                else:
+                    # Describimos la nueva confiuración del pin que vamos a reclamar
+                    settings_read = gpiod.LineSettings(
+                    direction=Direction.INPUT,
+                    bias=Bias.PULL_UP
+                    )
+                    
+                    req = None
+                    try:    # Reclamamos el pin
+                        req = CHIP.request_lines(
+                            consumer="HIL_GET_INPUT",
+                            config={pin_bcm: settings_read}
+                        )                    
+                        state = req.get_value(pin_bcm)
+                        # Como los reles de la generacion de salidas de la IPTU funciona ACTIVO-ALTO 
+                        if state == Value.INACTIVE:  
+                            return "STATE,HIGH"
+                        else:
+                            return "STATE,LOW"
+                    
+                    except Exception as e:
+                        return f"ERROR, Excepción en GET_INPUT: {e}"
+                    
+                    finally:
+                        if req:
+                            req.release()  # Liberamos la linea
+            else:
+                return "ERROR,Comando GET_INPUT inválido. Formato correcto: GET_INPUT,<pin_id>"
+            
+            
         elif command.startswith("GET_OUTPUT,"):
             parts = command.split(',')
             if len(parts) == 2:
@@ -532,27 +587,46 @@ def parse_and_execute(command):
                 
                 pin_bcm = T5_PIN_MAP[pin_id]
 
-                # Describimos la nueva confiuración del pin que vamos a reclamar
-                settings_read = gpiod.LineSettings(
-                direction=Direction.INPUT,
-                bias=Bias.PULL_UP
-                )
-                
-                req = None
-                try:    # Reclamamos el pin
-                    req = CHIP.request_lines(
-                        consumer="HIL_GET_OUTPUT",
-                        config={pin_bcm: settings_read}
-                    )                    
-                    state = req.get_value(pin_bcm)
-                    # Como los reles de la generacion de salidas de la IPTU funciona ACTIVO-ALTO 
-                    if state == Value.INACTIVE:  
-                        return "STATE,HIGH"
-                    else:
-                        return "STATE,LOW"
-                finally:
-                    if req:
-                        req.release()  # Liberamos la linea
+                if pin_id in T5_REQUESTS:
+                    try:
+                        req = T5_REQUESTS[pin_id]
+                        state = req.get_value(pin_bcm)
+                        
+                        # Lógica de retorno (Invertida porque Pull-Up + Active Low)
+                        if state == Value.INACTIVE: 
+                            return "STATE,HIGH"
+                        else:
+                            return "STATE,LOW"
+                    except Exception as e:
+                            return f"ERROR, Fallo leyendo pin ocupado: {e}"
+                    
+                    
+                else:
+                    # Describimos la nueva confiuración del pin que vamos a reclamar
+                    settings_read = gpiod.LineSettings(
+                    direction=Direction.INPUT,
+                    bias=Bias.PULL_UP
+                    )
+                    
+                    req = None
+                    try:    # Reclamamos el pin
+                        req = CHIP.request_lines(
+                            consumer="HIL_GET_OUTPUT",
+                            config={pin_bcm: settings_read}
+                        )                    
+                        state = req.get_value(pin_bcm)
+                        # Como los reles de la generacion de salidas de la IPTU funciona ACTIVO-ALTO 
+                        if state == Value.INACTIVE:  
+                            return "STATE,HIGH"
+                        else:
+                            return "STATE,LOW"
+                    
+                    except Exception as e:
+                        return f"ERROR, Excepción en GET_OUTPUT: {e}"
+                    
+                    finally:
+                        if req:
+                            req.release()  # Liberamos la linea
             else:
                 return "ERROR,Comando GET_OUTPUT inválido. Formato correcto: GET_OUTPUT,<pin_id>"
 

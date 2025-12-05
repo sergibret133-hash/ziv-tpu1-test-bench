@@ -194,6 +194,8 @@ class ModernTestRunnerApp(ctk.CTk):
             # "Ejecutar Rafaga De Rendimiento": ["NUM_PULSES: CHANNEL: PULSE_DURATION: LOOP_DELAY:"], # Antiguo, para un solo canal
             "Ejecutar Rafaga De Rendimiento": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
             "Ejecutar Rafaga GUI": ["CHANNELS_STR: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
+            "Escenario 4: Prueba de Sensibilidad PWM" : ["CHANNELS_TO_TEST: START: END:"],
+            
             
             # --- Tests de Registro Cronológico ---
             "Retrieve Chronological Register": [],

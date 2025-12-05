@@ -6,7 +6,7 @@ Documentation    Tests para controlar el Hardware-in-the-Loop (Raspberry Pi).
 
 
 *** Variables ***
-${RASPBERRY_PI_IP}    10.212.42.33      # IP por defecto, la GUI la reemplazará por la que el usuario indique
+${RASPBERRY_PI_IP}    10.212.42.42      # IP por defecto, la GUI la reemplazará por la que el usuario indique
 ${HIL_PORT}           65432          # Puerto del servidor HIL
 ${COMMAND_STR}    default
 # ${CHANNEL}    1    # Canal de prueba para T0 y T5
@@ -17,6 +17,12 @@ ${NUM_PULSES}    10
 ${PULSE_DURATION}    0.5
 ${LOOP_DELAY}    1
 ${LOOP_DELAY}       2    # Delay entre pulsos en el test de pulsos repetidos para que de tiempo a que el sistema se estabilice
+
+# Parámetros para el test de sensibilidad PWM (ms)
+${START}    40    # Ancho de pulso inicial en ms
+${END}      5     # Ancho de pulso final en ms
+
+
 
 *** Test Cases ***
 Ejecutar Rafaga De Rendimiento
@@ -39,7 +45,10 @@ Ejecutar Rafaga De Rendimiento
     Log To Console    El comando tarda  ${total_duration_s} segundos aprox.
 # **************************************************
     ${response}=    Send Hil Command    ${RASPBERRY_PI_IP}    BURST_BATCH,${NUM_PULSES},${PULSE_DURATION},${LOOP_DELAY},${CHANNELS_TO_TEST}    ${HIL_PORT}    ${total_duration_s}
+    # ${response}=    Send Hil Command    ${RASPBERRY_PI_IP}    BURST_BATCH,${NUM_PULSES},${PULSE_DURATION},${LOOP_DELAY},${CHANNELS_TO_TEST}    ${HIL_PORT}    30
     Log To Console   \n\n *** RÁFAGA COMPLETADA. RESPUESTA RPI: ${response} ***
+    Log To Console    Esperando a que se silencien los traps SNMP...
+    Wait For Traps Silence    B    silence_window=3
 
 # *************** RECOLECCION DE DATOS ********************************
     # Obtenemos los logs de T0 y T5 de la RPI
@@ -48,14 +57,48 @@ Ejecutar Rafaga De Rendimiento
     # Obtenemos todos los traps recolectados
     ${all_new_traps_A}=    Get Traps Since Index    A    ${start_index_A}
     ${all_new_traps_B}=    Get Traps Since Index    B    ${start_index_B}
-    Log To Console    Traps nuevos recibidos A: ${all_new_traps_A}
-    Log To Console    Traps nuevos recibidos B: ${all_new_traps_B}
+    # Log To Console    Traps nuevos recibidos A: ${all_new_traps_A}
+    # Log To Console    Traps nuevos recibidos B: ${all_new_traps_B}
     # **************************************************************
     # Generamos el informe final combinando los datos del RPI (${rpi_logs}) y los traps SNMP (${FULL_SNMP_DATA_LIST})
     Log To Console    Generando informe de rendimiento
-    ${csv_path}=    Generate Burst Performance Report    ${rpi_logs}    ${all_new_traps_A}    ${all_new_traps_B}
+    ${csv_path}    ${t3_traps_count}    ${t4_traps_count}=    Generate Burst Performance Report    ${rpi_logs}    ${all_new_traps_A}    ${all_new_traps_B}
     Log To Console    Informe generado: ${csv_path}
+    Log To Console    Número de traps T3 recibidos: ${t3_traps_count}
+    Log To Console    Número de traps T4 recibidos: ${t4_traps_count}
 
+Escenario 4: Prueba de Sensibilidad PWM
+    [Documentation]    Barrido descendente del ancho de pulso empoleado. De esta manera logramos encontrar el pulso de corte en el que la IPTU deja de detectar la señal.
+    Log To Console    \n *** INICIANDO PRUEBA DE SENSIBILIDAD PWM EN CANALES ${CHANNELS_TO_TEST} ***
+    ${csv_path}    Init Pwm Step Test
+    Log To Console    Init del informe generado en: ${csv_path}
+    
+    FOR    ${pulse_width}    IN RANGE    ${START}    ${END}    -1
+        ${duration_s}=    Evaluate    ${pulse_width} / 1000.0    # A segundos
+
+        Log To Console    \n  *** Enviado pulso de ${pulse_width} ms
+
+        Hil Start Performance Log    ${RASPBERRY_PI_IP}    ${CHANNELS_TO_TEST}
+
+        Send Hil Command    ${RASPBERRY_PI_IP}    BURST_BATCH,10,${duration_s},0.05,${CHANNELS_TO_TEST}    ${HIL_PORT}    5
+
+        Sleep    2s
+
+        ${rpi_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
+
+        # Generamos el informe parcial
+        ${success_rate}    ${t0_count}    ${t5_count}    Pwm Step Test Analizer    ${rpi_logs}
+
+        Log To Console    Resultados para pulso ${pulse_width} ms: T0 detectados=${t0_count}, T5 detectados=${t5_count}, Tasa de éxito=${success_rate}%
+
+        # Guardamos los resultados en el informe
+        Log Pwm Step Test Result    ${csv_path}    ${pulse_width}    ${t0_count}    ${t5_count}    ${success_rate}
+        
+        # Si tenemos tasa de exito 0%, ¿salimos del bucle?
+        Run Keyword If    '${success_rate}' == '0'    Exit For Loop
+    END
+
+    Log To Console    \n *** BARRIDO COMPLETADO. REvisa el .csv con ruta: ${csv_path} ***
 Ejecutar Rafaga GUI
     Log To Console    \n *** INICIANDO RÁFAGA desde la GUI DE ${NUM_PULSES} PULSOS EN LOS CANALES: ${CHANNELS_STR} ***
 

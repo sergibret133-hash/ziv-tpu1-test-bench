@@ -1,0 +1,11 @@
+[
+    {
+        "type": "Ejecutar Test",
+        "name": "Ejecutar Rafaga De Rendimiento (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Tests.robot",
+        "vars": "CHANNELS_TO_TEST:1 NUM_PULSES:50 PULSE_DURATION:0.8 LOOP_DELAY:0.8",
+        "param": ""
+    }
+]

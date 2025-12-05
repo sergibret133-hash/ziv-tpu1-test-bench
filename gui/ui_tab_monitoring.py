@@ -731,9 +731,20 @@ def open_burst_report_window(parent_app, header, rows, filename):
     # Etiquetas para el Treeview
     tree.tag_configure('performance_fail', foreground="#f0be1b", font=("Arial", 10, "bold")) # Naranja 
     tree.tag_configure('missing_data', foreground="#f34d00") # Rojo brillante
+    tree.tag_configure('average_row', foreground="#1DC4D6", font=("Arial", 10, "bold"))
     
     for item in rows:
+        # Si la fila está vacía (recordemos que hemos dejado una separación antes de la fila de averages), LA SALTAMOS!
+        if not item:
+            continue
+
         tags = []
+    
+        if item[0] == "MEDIA":      # Si es la fila de la media, la primera columna contendrá "MEDIA"
+            tags.append('average_row')      # Añadimos el tag que habámos configurado antes para los averages, de color azul
+            tree.insert("", "end", values=item, tags=tuple(tags))
+            continue    # Añadiendo esto lo que hacemos es evitar que se aplique el filtro de que si supera los 1ms se muestra naranja (solo lo aplicaremos en cada uno de los delays)
+        
         if "MISSING" in item or "N/A" in item:
             tags.append('missing_data')
             

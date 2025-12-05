@@ -20,13 +20,24 @@ HIL_SERIAL = None
 # Opciones: 
 # "TEMPORAL_SPLIT" (Arduino para Burst, RPi para Logs)
 # "FINAL_RPI_ONLY" (RPi para Burst y Logs)
-HIL_SETUP_MODE = "TEMPORAL_SPLIT"
+HIL_SETUP_MODE = "FINAL_RPI_ONLY"
 # *****************************************
 
 # *** CONFIGURACIÓN DEL HIL TEMPORAL ***
 ARDUINO_COM_PORT = "COM3"
 ARDUINO_BAUDRATE = 9600
 # *****************************************
+# TIEMPOS VENTANAS
+WIN_PROC_TX  = 0.015
+WIN_CHANNEL  = 0.015
+WIN_PROC_OUT  = 0.015
+WIN_RELAY_HW = 0.02
+
+WIN_T0_TO_T5 = 0.030
+
+SKEW_TOLERANCE = 0.015  # No modifica, solo es para buscar valor hacia atras en las ventanas
+
+HIL_CLOCK_OFFSET_S = 0.0  # Sí modifica los valores de los timestamps de la RPI
 
 def _get_app_ref():
     """Función auxiliar para recuperar la app activa de forma segura y poder usarla en los keywords para acceder a clases que solo la lógica de la aplicación principal tiene acceso."""
@@ -366,8 +377,8 @@ def _extract_tpu_timestamp(trap_data):
 
 def _extract_trap_type_and_time(trap_data):
     """
-    Analiza un trap y devuelve su tipo (T1, T2, T3, T4) y su timestamp interno TPU.
-    Devuelve (tipo, timestamp_str) o (None, None) si no es relevante.
+    Analiza un trap y devuelve su tipo (T1, T2, T3, T4) y su timestamp interno TPU y valor.
+    Valor será '1' cuando sea activación y '0' para desactivacion (None si no lo detecta)
     """
     # Convertimos a string para búsqueda rápida (aunque sea menos elegante, es robusto)
     trap_str = json.dumps(trap_data)
@@ -379,13 +390,32 @@ def _extract_trap_type_and_time(trap_data):
     elif "tpu1cNotifyOutputCircuits" in trap_str: trap_type = "T4"
     
     if not trap_type:
-        return None, None
+        return None, None, None
 
     # Extraemos el timestamp TPU (usando la función que ya tenías o una regex mejorada)
     # Asumo que tu función _extract_tpu_timestamp existente funciona bien.
     timestamp = _extract_tpu_timestamp(trap_data)
     
-    return trap_type, timestamp
+    # Extraemos el valor (activacion o desactivacion)
+    value = None
+    try:
+        if isinstance(trap_data, dict) and 'varbinds_dict' in trap_data:
+            varbinds = trap_data['varbinds_dict']
+            # Buscamos la clave del diccionario que nos proporciona el estado
+            for k, v in varbinds.items():
+                if "tpu1cNotifyState" in k:
+                    value = str(v)
+                    break
+    except Exception:
+        pass    # Para el fallback
+    
+    # Fallback
+    if value is None:
+        match = re.search(r'tpu1cNotifyState":\s*"?(\d)"?', trap_str)   # Con "? .. " hacemos que pueda pillar las comillas en caso de que nos pasaran un json. El dato que nos quedamos (\d). Solo caturara un numero, '1' o '0'
+        if match:
+            value = match.group(1)
+            
+    return trap_type, timestamp, value
 
 
 
@@ -442,80 +472,165 @@ def generate_performance_report_OLD (rpi_logs, traps_A_list, traps_B_list):
 
 
 def _to_epoch(value):
-    """ Convierte el Timestamp de la RPI (que esta en ms) o el timestamp en string que viene de los traps SNMP de la TPU a segundos Epoch (que es un float) 
-    para poder restar más tarde tiempos sin problema """
-
-    if not value or value == "MISSING" or value == "N/A":
+    """Convierte timestamps:
+       - RPi en ns (int o float grande) -> seconds (float)
+       - TPU en ISO string -> seconds (float)
+       - Si ya es float en segundos, lo devuelve tal cual.
+    """
+    if not value or value in ("MISSING", "N/A"):
         return None
-    
-    try:
-        if isinstance(value, int):  # Si es un int (timestamp de la RPI en ns)
-            return value / 1_000_000_000.0
 
-        elif isinstance(value, str):   # Si es el timestamp de la TPU
-            tpu_date = datetime.fromisoformat(value)    # Covertimos a objeto datetime
-            return tpu_date.timestamp()     # Nos quedamos con el timestamp
-
-    except Exception as e:
-        print(f"Error convirtiendo fecha '{value}': {e}")
+    # Números: int o float
+    if isinstance(value, (int, float)):
+        v = float(value)
+        # heurística: si es > 1e12, probablemente ns -> convertir a segundos
+        if v > 1e12:
+            return v / 1_000_000_000.0
+        # si está en rango típico epoch (ej. > 1e9 ~ 2001-09-09), lo tomamos como segundos
+        if v > 1e9:
+            return v
+        # si es pequeño (p.e. < 1e6) lo consideramos inválido
         return None
+
+    # Strings: intentar ISO y varios formatos conocidos
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).timestamp()
+        except Exception:
+            pass
+
+        for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return datetime.strptime(value, fmt).timestamp()
+            except Exception:
+                pass
+
+        print(f"Error converting timestamp '{value}'")
+        return None
+
     return None
 
-def find_closest_next(target_time, candidate_list, time_window=2.0):
+
+def find_closest_next(target_time, candidate_list, time_window=2.0, skew_tolerance=0.0, used_set=None):
     """
     Para evitar coger de la lista de traps aquellos que estén duplicados o fuera de secuencia.
     Busca en candidate_list el valor de tiempo que este más cerca a target_time
     Este valor tiene que cumplir que target_time <= valor < target_time + time_window
     Si no encuentra valor devuelve 'None'
+    Con el argumento skew_tolerance podemos permitir buscar hacia ATRAS un determinado tiempo (s). Interesante para compensar relojes desincronizados entre varios equipos. 
     """
     if target_time is None:
-        return None
+        return None, None
     
-    valid_candidates = []
-    for cand in candidate_list:
-        c_val = _to_epoch(cand)
-        if c_val is not None:
-            # Buscamos eventos que ocurrieron DESPUÉS del target (para evitar duplicados), pero dentro de la ventana (para no coger uno muy posterior que no cuadre con la sincronización por indice) 
-            if target_time <= c_val < (target_time + time_window):
-                valid_candidates.append(c_val)
+    best_val = None
+    best_idx = None
     
-    if not valid_candidates:
-        return None
-    
-    return min(valid_candidates)    # Devolvemos dentro de todos los valores que hemos adquirido en la ventana EL MAS CERCANO AL EVENTO ORIGINAL (target_time)
+    for idx, c_val in enumerate(candidate_list):
+        if used_set is not None and idx in used_set:
+            continue
+
+        if c_val is None:
+            continue
+        # Buscamos eventos que ocurrieron DESPUÉS del target (para evitar duplicados) y antes tambien por la compensacion del skew que nos pasen, pero dentro de la ventana (para no coger uno muy posterior que no cuadre con la sincronización por indice) 
+        start_search = target_time - skew_tolerance
+        end_search = target_time + time_window
+        if start_search <= c_val < end_search:
+            # Encontramos un candidato válido.
+            # ESTRATEGIA GREEDY: Nos quedamos con el PRIMERO válido que encontremos (el más antiguo disponible)
+            # Esto es mejor para FIFOs (First In, First Out) como los traps.
+            if best_val is None or c_val < best_val:
+                best_val = c_val
+                best_idx = idx
+
+    if best_idx is not None and used_set is not None:
+        used_set.add(best_idx)
+        
+    return best_val, best_idx
 
 
 def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
     """
     Genera un informe correlacionando listas de traps con logs de RPi mediante Correlación Temporal. De esta forma, evitamos traps duplicados o que lleguen muy tarde.
     ¡IMPORTANTE! ¡LA RPI Y LA TPU TIENEN QUE ESTAR SINCRONIZADAS CONTRA EL MISMO RELOJ POR NTP!
+    Filtramos solo para activaciones.
     """
     # Preparamos un diccionario para clasificar los traps SNMP en función del tiempo al que pertenezcan
     traps_by_type = {"T1": [], "T2": [], "T3": [], "T4": []}
     
     # Clasificamos todos los traps de la Sesión A (T1 y T2)
     for trap in all_traps_a:
-        t_type, t_time = _extract_trap_type_and_time(trap)
+        t_type, t_time, t_val = _extract_trap_type_and_time(trap)
         if t_type in ["T1", "T2"]:
-            traps_by_type[t_type].append(t_time)
+            if t_val == '1' or t_val is None:
+                epoch_t = _to_epoch(t_time)
+                if epoch_t is not None:
+                    traps_by_type[t_type].append(epoch_t)
 
     # Clasificamos todos los traps de la Sesión B (T3 y T4)
     for trap in all_traps_b:
-        t_type, t_time = _extract_trap_type_and_time(trap)
+        t_type, t_time, t_val = _extract_trap_type_and_time(trap)
         if t_type in ["T3", "T4"]:
-            traps_by_type[t_type].append(t_time)
+            if t_val == '1' or t_val is None:
+                epoch_t = _to_epoch(t_time)
+                if epoch_t is not None:
+                    traps_by_type[t_type].append(epoch_t)
             
-    # Damos por hecho que los traps llegan ordenados. Aunque lo ideal sería ordenar las listas..
-    
-    
     # Obtenemos las listas
-    t0_list = rpi_logs.get('t0_ns',[])
-    t5_list = rpi_logs.get('t5_ns',[])
+    raw_t0_list = rpi_logs.get('t0_ns',[])
+    raw_t5_list = rpi_logs.get('t5_ns',[])
     
+    t5_epochs = []
+    for t_ns in raw_t5_list:
+        if t_ns:
+            t5_epochs.append(float(t_ns) / 1_000_000_000.0) # Convertimos a segundos
+            
+    t0_epochs = []
+    for t_ns in raw_t0_list:
+        if t_ns:
+            t0_epochs.append(float(t_ns) / 1_000_000_000.0)
+            
+            
+                     
+    # Convertimos traps T1
+    t1_epochs = [t for t in traps_by_type["T1"] if t is not None]
     
+    stats = {
+        "input_lat": [], "tx_proc": [], "ch_delay": [],
+        "rx_proc": [], "output_lat": [], "total_delay": []
+    }      
+            
+
+    num_cycles = len(t0_epochs)
+    use_physical_ref = True
+    
+
+    # Antes de empezar a iterar sobre todas las listas, necesitamos saber num_cycles. 
+    # Usamos la lista de T1 como ancla del numero "correcto" (éste marcara la sincronización de tiempos posteriores T2, T3,..) 
+    
+
+
+    # COMO EMERGENCIA SI NO NOS LLEGAN LOS LOGS
+    if num_cycles == 0 and len(t1_epochs) > 0:  # Si no hay T0, pero si T1, usamos T1 como ancla
+        use_physical_ref = False
+        num_cycles = len(t1_epochs)
+        print("WARNING: No hay logs T0. Usando T1 como ancla de emergencia")
+    else:
+        print(f"INFO REPORT: Usando T0 como ancla. num_cycles = {num_cycles} = len(t0_list)")
+
+
     # Generamos el informe CSV
     filename = f"test_results/burst_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     os.makedirs("test_results", exist_ok=True)
+    
+
+    
+    used_indices = {
+        "T1": set(),
+        "T2": set(),
+        "T3": set(),
+        "T4": set(),
+        "T5": set()
+    }
     
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
@@ -525,70 +640,88 @@ def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
             "Lat. Entrada (T1-T0)", "Proc. TX (T2-T1)",
             "Canal/Loop (T3-T2)", 
             "Proc. RX (T4-T3)", "Lat. Salida (T5-T4)",
-            "TOTAL (T5-T1)",
+            "TOTAL Delay",
             "T0 (Fís)", "T1 (Trap)", "T2 (Trap)", "T3 (Trap)", "T4 (Trap)", "T5 (Fis)"
             ])    
         
-        # Antes de empezar a iterar sobre todas las listas, necesitamos saber num_cycles. 
-        # Usamos la lista de T1 como ancla del numero "correcto" (éste marcara la sincronización de tiempos posteriores T2, T3,..) 
-        
-        t1_epochs = []
-        for t in traps_by_type["T1"]:
-            val = _to_epoch(t)
-            if val: t1_epochs.append(val)
-        
-        # Si cuando intentamos pasar a epochs T1 falla, intentamos usar T5 como salvaguarda.
-        num_cycles = len(t1_epochs) if t1_epochs else len(traps_by_type["T5"])
-            
+
+
         for i in range(num_cycles):
-            # ******** DATOS  ********
-            t1_val = t1_epochs[i] if i < len(t1_epochs) else None
+            t0_val, t1_val, t2_val, t3_val, t4_val, t5_val = None, None, None, None, None, None
+            ref_for_t3, ref_for_t4 = None, None
             
-            # Buscamos T0 basado en T1 (hacia atras en el tiempo ya que T0 ocurre antes que T1) Como find_closest_next SOLO FUNCIONA HACIA DELANTE ->
-            # -> Lo implementamos aqui mismo
-            t0_val = None
-            if t1_val:
-                candidates_t0 = []
-                for raw_t0 in t0_list:
-                    val_t0 = _to_epoch(raw_t0)  # Convertimos a secs antes
-                    if val_t0 and (t1_val - 0.050) < val_t0 <= (t1_val + 0.005):  # Ventana hacia atras (desde val_t1)
-                        candidates_t0.append(val_t0)
-                if candidates_t0:
-                    t0_val = max(candidates_t0)    # Nos queremos quedar con el valor más proximo a T1 (para no coger anteriores..), que es el maximo de los que ha encontrado
-                    
-            
-            
-            # find_closest_next ya aplica el _to_epoch. Por lo que obtenemos los valores convertidos a ns ya
-            # Buscamos T2 basado en T1 (Ventana de 1.5s adelante)
-            t2_val = find_closest_next(t1_val, traps_by_type["T2"], 0.020)
-            
-            # Buscamos T3 basado en T2. Si el find_closest_next anterior hubiera fallado partimos de T1 para no romper con la sincronizacion
-            ref_for_t3 = t2_val if t2_val else t1_val
-            t3_val = find_closest_next(ref_for_t3, traps_by_type["T3"], 0.060)
-            
-            # Buscamos T4 basado en T3. Si el find_closest_next anterior hubiera fallado partimos de T2 para no romper con la sincronizacion
-            ref_for_t4 = t3_val if t3_val else ref_for_t3
-            t4_val = find_closest_next(ref_for_t4, traps_by_type["T4"], 0.020)
-            
-            # Buscamos T5 (Físico RPi) basado en T4. Si el find_closest_next anterior hubiera fallado partimos de T3 para no romper con la sincronizacion
-            # Nota: T5 es int (ns), la función _to_epoch dentro de find_closest lo maneja
-            ref_for_t5 = t4_val if t4_val else ref_for_t4
-            t5_val = find_closest_next(ref_for_t5, t5_list, 0.030)
-            
+            if use_physical_ref:    # MODO NORMAL; con T0 como ancla (cuando dispongamos de logs RPi)
+                t0_val = t0_epochs[i] if i < len(t0_epochs) else None
+                
+                if t0_val and len(t1_epochs):  # Solo si tenemos T0 seguimos buscando T1
+                    t1_val, t1_idx = find_closest_next(t0_val, t1_epochs, time_window=0.030, skew_tolerance=0.020, used_set=used_indices["T1"])
+
+            else:
+                # Modo con T1 como ancla y suponiendo que recibimos traps SNMP en caso de no disponer logs RPi
+                # ******** DATOS  ********
+                t1_val = t1_epochs[i]
+                
+                # Buscamos T0 basado en T1 (hacia atras en el tiempo ya que T0 ocurre antes que T1) Como find_closest_next SOLO FUNCIONA HACIA DELANTE ->
+                # -> Lo implementamos aqui mismo
+                if t1_val:
+                    candidates_t0 = []
+                    for val_t0 in t0_epochs:
+                        if val_t0 and (t1_val - 0.030) < val_t0 <= (t1_val + 0.005):  # Ventana hacia atras (desde val_t1)
+                            candidates_t0.append(val_t0)
+                    if candidates_t0:
+                        t0_val = max(candidates_t0)    # Nos queremos quedar con el valor más proximo a T1 (para no coger anteriores..), que es el maximo de los que ha encontrado
+                        
+                
+            if t1_val:    
+                # find_closest_next ya aplica el _to_epoch. Por lo que obtenemos los valores convertidos a ns ya
+                # Buscamos T2 basado en T1 (Ventana de 1.5s adelante)
+                t2_val, t2_idx = find_closest_next(t1_val, traps_by_type["T2"], WIN_PROC_TX, skew_tolerance=0.001, used_set=used_indices["T2"] )
+
+                # Buscamos T3 basado en T2. Si el find_closest_next anterior hubiera fallado partimos de T1 para no romper con la sincronizacion
+                ref_for_t3 = t2_val if t2_val else t1_val
+                t3_val, t3_idx = find_closest_next(ref_for_t3, traps_by_type["T3"], WIN_CHANNEL, skew_tolerance=0.002, used_set=used_indices["T3"])
+                
+                # Buscamos T4 basado en T3. Si el find_closest_next anterior hubiera fallado partimos de T2 para no romper con la sincronizacion
+                ref_for_t4 = t3_val if t3_val else ref_for_t3
+                t4_val, t4_idx = find_closest_next(ref_for_t4, traps_by_type["T4"], WIN_PROC_OUT, skew_tolerance=0.002, used_set=used_indices["T4"])
+                
+            # Buscamos T5 (Físico RPi) 
+            if t0_val:
+                t5_val, t5_idx = find_closest_next(t0_val, t5_epochs, time_window=0.030, skew_tolerance=0, used_set=used_indices["T5"])
+            # Si el find_closest_next anterior hubiera fallado partimos del trap anterior.
+            elif t4_val:
+                t5_val, t5_idx = find_closest_next(t4_val, t5_epochs, WIN_RELAY_HW, skew_tolerance=0.002, used_set=used_indices["T5"])
+
+
+            if t5_val is not None:
+                t5_val += HIL_CLOCK_OFFSET_S  # Corregimos el retraso del reloj RPi
 
                 
             # ********* CALCULOS DIFERENCIA DE TIEMPO/DELAYS *********
-            def calc_delta(end, start):
+            def calc_delta(end, start, delay_name=None):
                 if end is not None and start is not None:
-                    return round((end - start) * 1000, 3)
+                    val = round((end - start) * 1000, 3)
+                    # Si tenemos key_name, guardamos para la media
+                    if delay_name and val >= -10:
+                        stats[delay_name].append(val)
+                    return val
                 return "N/A"    # Si alguno de los parametros pasado (tiempo "end" o "start") no existe devolvemos N/A
             
-            input_lat = calc_delta(t1_val, t0_val)
-            tx_proc = calc_delta(t2_val, t1_val)
-            ch_delay = calc_delta(t3_val, t2_val)
-            rx_proc = calc_delta(t4_val, t3_val)
-            output_lat = calc_delta(t5_val, t4_val)
-            total_delay = calc_delta(t5_val, t1_val)    # DE MOMENTO DEJO COMO START T1 EN LUGAR DE T0, PUESTO QUE ESTAMOS ACTIVANDO LOS INPUTS DE FORMA TEMPORAL CON EL MÓDULO ARDUINO
+            input_lat = calc_delta(t1_val, t0_val, "input_lat")
+            tx_proc = calc_delta(t2_val, t1_val, "tx_proc")
+            ch_delay = calc_delta(t3_val, t2_val, "ch_delay")
+            rx_proc = calc_delta(t4_val, t3_val, "rx_proc")
+            output_lat = calc_delta(t5_val, t4_val, "output_lat")
+
+            # Total Delay (T5 - T0) con fallback a T1 si no tenemos T0
+            if t0_val and t5_val:
+                total_delay = calc_delta(t5_val, t0_val, "total_delay")
+            elif t1_val and t5_val:
+                # Fallback si perdimos T0 pero tenemos T1
+                total_delay = calc_delta(t5_val, t1_val, "total_delay")
+            else:
+                total_delay = "N/A"
+            
             
             # formatamos los valores convertidos con epoch a sec
             t0_f = f"{t0_val:.3f}" if t0_val else "MISSING"
@@ -600,12 +733,36 @@ def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
             
             
             writer.writerow([i+1,
-                             input_lat, tx_proc, ch_delay, rx_proc, output_lat, total_delay,
-                             t0_f, t1_f, t2_f, t3_f, t4_f, t5_f
-                             ])
+                            input_lat, tx_proc, ch_delay, rx_proc, output_lat, total_delay,
+                            t0_f, t1_f, t2_f, t3_f, t4_f, t5_f
+                            ])
+                
+                
+                
+        # Fila de medias
+        writer.writerow([])     # Dejamos una separacion respecto a las filas anteriores.
+        
+        averages = ["MEDIA"]    # Lo ponemos como primer valor, ya que de esta manera lo hacemos coincidiir con la columna de Ciclos y todo cuadra cuando escribamos el row de average completo!
+        keys_order = ["input_lat", "tx_proc", "ch_delay", "rx_proc", "output_lat", "total_delay"]
+        
+        for k in keys_order:    # Aquí iteramos el contenido del vector que hemos creado con las claves del diccionario stats que recorreremos con el for!
+            values = stats[k]
+            if values: 
+                average = sum(values) / len(values)
+                averages.append(f"{average:.3f}")
+            else:
+                averages.append("N/A")
+        # COmo solo estamos rellenando de medias los delays, necesitamos rellenar el resto de columnas con vacíos
+        averages.extend([""] * 6)
+        
+        writer.writerow(averages)                
             
     print(f"BURST REPORT generado: {filename}")
-    return filename
+    
+    t3_traps_count = len(traps_by_type['T3'])
+    t4_traps_count = len(traps_by_type['T4'])
+    
+    return filename, t3_traps_count, t4_traps_count
 
 # Para poder tener acceso a app_ref desde Robot Framework
 def get_current_trap_count(session_id):
@@ -621,3 +778,101 @@ def get_traps_since_index(session_id, start_index):
     Esto lo hacemos porque Robot Framework no puede importar directamente clases de la lógica de la aplicación principal."""
     app = _get_app_ref()
     return app.trap_listener_controller.get_traps_since_index(session_id, int(start_index))
+
+
+def wait_for_traps_silence(session_id, silence_window=3.0):
+    """"
+    Se puede usar a modo de espera, bloqueandose hasta que el contador de traps se mantenga estable durante 'silence_window' segundos.
+    """
+    # OBtenemos el controlador una vez
+    controller = _get_app_ref().trap_listener_controller
+    
+    # Variables tiempo
+    last_change_time = time.time()
+    last_count = controller.get_current_trap_count(session_id)
+
+    print(f"DEBUG: Esperando {silence_window}s de silencio procedente de traps..")
+
+    while True:
+        time.sleep(0.5)   # Esperamos medio segundo entre comprobaciones
+        
+        current_count = controller.get_current_trap_count(session_id)
+        
+        if current_count != last_count:
+            # Si ha cambiado el contador, actualizamos la referencia de tiempo
+            last_count = current_count
+            last_change_time = time.time()
+            
+        elif (time.time() - last_change_time) >= float(silence_window):
+            # Si no cambia durante 'silence_window', salimos
+            print(f" Silencio detectado durante {silence_window}s. Continuando.")
+            return current_count
+        
+
+
+
+
+def hil_get_logs_force(ip: str, port: int = 65432):
+    """
+    Fuerza la descarga de los logs (con el comando GET_LOGS) sin intentar detener la grabación primero.
+    Para rescates de logs cuando el servidor no acaba de funcionar bien o nos da error al tratar de conectarnos de nuevo.
+    """
+    print("DEBUG: Intentando forzar descarga de logs (con el comando GET_LOGS)..")
+    try:
+        raw_response = send_hil_command(ip, "GET_LOGS", port)
+        
+        if raw_response.startswith("JSON,"):
+            json_data = raw_response[5:]
+            try:
+                logs = json.loads(json_data)
+                
+                # VERIFICACIÓN VISUAL COMPLETA
+                t0_count = len(logs.get('t0_ns', []))
+                t5_count = len(logs.get('t5_ns', []))
+                
+                print(f"DEBUG: ¡ÉXITO! Logs rescatados de la RAM de la RPi:")
+                print(f"Eventos T0 (Inicio): {t0_count}")
+                print(f"Eventos T5 (Fin): {t5_count}")
+                
+                return logs
+            except json.JSONDecodeError as e:
+                print(f"ERROR: JSON corrupto: {e}")
+                return {"t0_ns": [], "t5_ns": []}
+        else:
+            print(f"ERROR: Respuesta inesperada: {raw_response}")
+            return {"t0_ns": [], "t5_ns": []}
+            
+    except Exception as e:
+        print(f"ERROR FATAL de Conexión: {e}")
+        return {"t0_ns": [], "t5_ns": []}
+    
+    
+def pwm_step_test_analizer(rpi_logs):
+    """ Analiza un ciclo de la prueba pwm y devuelve la tasa de exito y los contadores tambien """
+    t0_list = rpi_logs.get('t0_ns', [])
+    t5_list = rpi_logs.get('t5_ns', [])
+    
+    t0_count = len(t0_list)
+    t5_count = len(t5_list)
+    
+    if t0_count == 0:
+        success_rate = 0.0
+    else:
+        success_rate = min((t5_count / t0_count) * 100.0, 100.0)
+    return success_rate, t0_count, t5_count
+
+def init_pwm_step_test():
+    """ Crea el archivo .csv para guardar el log de la prueba pwm step test """
+    filename = f"test_results/pwm_sweep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    os.makedirs("test_results", exist_ok=True)
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Pulse_Width_ms", "T0_count", "T5_count", "Success_Rate_%", "Status"])
+    return filename
+
+def log_pwm_step_test_result(filename, pulse_width_ms, t0_count, t5_count, success_rate):
+    """Añade una fila al .csv de log de la prueba pwm step test"""
+    status = "PASS" if success_rate == 100.0 else "CUT_OFF/FAIL"
+    with open(filename, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow([pulse_width_ms, t0_count, t5_count, f"{success_rate:.1f}", status])
