@@ -2071,25 +2071,25 @@ storage = function () {
 window.output = {};
 </script>
 <script type="text/javascript">
-window.output["suite"] = [1,2,3,0,[],[1,0,1270090],[],[[4,0,5,[],[1,528,1269530],[[0,6,7,0,8,9,0,0,[1,528,0],[]],[0,6,7,0,8,10,0,0,[1,544,3],[]],[0,11,12,0,13,14,15,0,[1,552,579],[[1097,2,16],[1131,2,17]]],[0,6,7,0,8,18,0,0,[1,1131,10],[]],[0,19,7,0,20,0,21,0,[1,1145,3],[[1148,2,22]]],[0,6,7,0,8,23,0,0,[1,1157,2],[]],[0,24,12,0,25,26,27,0,[1,1163,1268796],[[1269887,2,28],[1269955,2,29],[1269955,2,30],[1269956,2,31]]],[0,6,7,0,8,32,0,0,[1,1270020,23],[]],[0,6,7,0,8,33,0,0,[1,1270043,0],[]]]]],[],[1,1,0,0]];
+window.output["suite"] = [1,2,3,4,[],[1,0,2198],[],[[5,0,0,[],[1,1592,602],[[0,6,7,0,8,9,0,0,[1,1592,35],[]],[0,10,11,0,12,13,0,0,[1,1627,0],[]],[0,14,7,0,15,0,0,0,[1,1638,544],[[2182,2,16]]],[2,17,7,0,18,0,0,0,[1,2188,4],[[2188,2,19]]]]]],[],[1,1,0,0]];
 </script>
 <script type="text/javascript">
 window.output["strings"] = [];
 </script>
 <script type="text/javascript">
-window.output["strings"] = window.output["strings"].concat(["*","*Recue Data","*c:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\tests\\Recue_Data.robot","eNq9zbEKwlAMRuFXkYKj/aVjqV2sSidF1MFF0kuuBkoDSRR8e/sUDudbT0OLl3HeFFlGrgFsa1ydzTHzFC0H48Bx4s7kw8tqvZqjMdNEhp0nk1ATxb2/4bI/4GT65RSKYA/HmdObHx0FlaaDRtH+59OA2h8nKkvS","*Rescatar Datos De La Noche","*<p>NO ENVÍA COMANDOS. Solo recupera los logs que están en memoria de la RPi y genera el CSV.\x3c/p>","*Log To Console","*BuiltIn","*<p>Logs the given message to the console.\x3c/p>","*\\n *** INICIANDO RESCATE DE DATOS ***","*Intentando descargar logs de la RPi...","*Hil Get Logs Force","*MyKeywords","*<p>Fuerza la descarga de los logs (con el comando GET_LOGS) sin intentar detener la grabación primero. Para rescates de logs cuando el servidor no acaba de funcionar bien o nos da error al tratar de conectarnos de nuevo.\x3c/p>","*${RASPBERRY_PI_IP}    ${HIL_PORT}","*${rpi_logs}","eNptUV1OAjEYfOcUn/sgmOBmt2y7Pz4pIGJQjGJi4gOpS8Xq0pJ2lxg8gcfwDN5AL+ZXQOTBpg/tZDrzdabTPbntZdBXpVAlVxMNj9osuYGJsDk3U44HKPTUQiPXCkQBuZ6teL3uaDwY9m4OfL921h9A40oYK63TEQcZHD8YKRxPVWLB8ZUSr/L7UwGHMPBJSPzI7YzRqEX8jcaORAbt1RM0NYIXcskn3HEyGMmZ0FWJgxVgdf4iSuDPlS05mpViNteGFzMn4ayoH1iYc8O3cxf4K722a190nM0ar/9+qA5CLSSq+XAt7LwSKJ3B+c3wsvnm5U9cKVFYLwPPa4JXBmPlLvdhzKKEhXFMUxq2SMxoqwlbkCHIAhKF0Q4YI5ikScziHTBJKQnTJCTBDpgiGDHKCPkDkwDBTXD/hmLc4JVxsWyC8Guddd1fH9/vd/3RcA8Grlrjunb52VXbHK6PL35PVzKrAcDh/rQ8gu4Cc0XWKIBGX8lcamw6atGA/cOh0DiVCgm4kpgk5AdLjrcv","eNpNzT0KAjEQQOGrpBDSLGFmkvkTPInFIiIqLKu4dot3dyzUlO9r3mZ93K/jdDsvr7RLaz5eDvN8mpa8TTkPKT9hnD+xR5VmgqrsjJVUuA7phxIoQA1bhxpobiraoTkTuiFBhx7YhIXojwaBGtq8Q3SuUEm8RwqsSA7feynlDVSdMFY=","*Recuperando Traps de la memoria del PC...","*Create List","*<p>Returns a list containing given items.\x3c/p>","*${empty_list}","*${empty_list} = []","*Generando CSV Maestro...","*Generate Burst Performance Report","*<p>Genera un informe correlacionando listas de traps con logs de RPi mediante Correlación Temporal. De esta forma, evitamos traps duplicados o que lleguen muy tarde. ¡IMPORTANTE! ¡LA RPI Y LA TPU TIENEN QUE ESTAR SINCRONIZADAS CONTRA EL MISMO RELOJ POR NTP! Filtramos solo para activaciones.\x3c/p>","*${rpi_logs}    ${empty_list}    ${empty_list}","*${csv_path}    ${t3_traps_count}    ${t4_traps_count}","*INFO REPORT: Usando T0 como ancla. num_cycles = 43506 = len(t0_list)\nBURST REPORT generado: test_results/burst_report_20251205_080939.csv","*${csv_path} = test_results/burst_report_20251205_080939.csv","*${t3_traps_count} = 0","*${t4_traps_count} = 0","*\\n *** ¡RESCATE COMPLETADO! ***","*Informe guardado en: ${csv_path}"]);
+window.output["strings"] = window.output["strings"].concat(["*","*HIL Netstorm Control","*c:\\Users\\sergio.bret\\OneDrive - alfanar\\Escritorio\\ZIV\\TFG\\Proyecto\\tests\\HIL_Netstorm_Control.robot","eNq9jb0KwkAQBl9FApbmk5Qhpok/CYhaqIVNuIQ9PThvYXcRfHvvKSxmqoFp3OIl5DeFD5FqAF2Nm5Iosp6By0nIcE60lfChZbVeZVz0LjnBTmcJxhIYj+GO6/6Ai/CXZmMYqSn64TieyDRH77HjZMKxFJ7Yivbfxwau/QGrIFPo","*<p>Tests para controlar el equipo Netstorm, de Albedo.\x3c/p>","*Escenario WP3: Togglear Ruido en Netstorm","*Connect To Netstorm","*netstorm_controller","*<p>Conecta al Netstorm via VNC\x3c/p>","*${NETSTORM_IP}    ${NETSTORM_VNC_PASS}","*Log To Console","*BuiltIn","*<p>Logs the given message to the console.\x3c/p>","*Haciendo Toggle de Ruido","*Toggle Noise","*<p>Inicia la inyección de ruido en Netstorm\x3c/p>","*VNC: Activando inyección de ruido..","*Disconnect From Netstorm","*<p>Desconecta la sesión VNC del Netstorm\x3c/p>","*VNC: Desconectando de Netstorm..."]);
 </script>
 <script type="text/javascript">
-window.output["stats"] = [[{"elapsed":"00:21:10","fail":0,"label":"All Tests","pass":1,"skip":0}],[],[{"elapsed":"00:21:10","fail":0,"id":"s1","label":"Recue Data","name":"Recue Data","pass":1,"skip":0}]];
+window.output["stats"] = [[{"elapsed":"00:00:01","fail":0,"label":"All Tests","pass":1,"skip":0}],[],[{"elapsed":"00:00:02","fail":0,"id":"s1","label":"HIL Netstorm Control","name":"HIL Netstorm Control","pass":1,"skip":0}]];
 </script>
 <script type="text/javascript">
 window.output["errors"] = [];
 </script>
 <script type="text/javascript">
-window.output["baseMillis"] = 1764918578546;
+window.output["baseMillis"] = 1765377077122;
 </script>
 <script type="text/javascript">
-window.output["generated"] = 1270224;
+window.output["generated"] = 2221;
 </script>
 <script type="text/javascript">
 window.output["expand_keywords"] = null;

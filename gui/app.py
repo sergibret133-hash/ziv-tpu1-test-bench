@@ -190,12 +190,17 @@ class ModernTestRunnerApp(ctk.CTk):
                 "ACTIVATE_DEACTIVATE_BLOCKING", 
                 "BLOCKING_DURATION"
             ],
-            "Send Input Command": ["RASPBERRY_PI_IP: COMMAND_STR:PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,..."],
+            # --- Tests HIL ---
+            "Send Input Command": ["RASPBERRY_PI_IP: COMMAND_STR:PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,... NETWORK_PROFILE:NOISE"],
             # "Ejecutar Rafaga De Rendimiento": ["NUM_PULSES: CHANNEL: PULSE_DURATION: LOOP_DELAY:"], # Antiguo, para un solo canal
-            "Ejecutar Rafaga De Rendimiento": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
-            "Ejecutar Rafaga GUI": ["CHANNELS_STR: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
-            "Escenario 4: Prueba de Sensibilidad PWM" : ["CHANNELS_TO_TEST: START: END:"],
+            "Ejecutar Rafaga De Rendimiento": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
+            "Ejecutar Rafaga GUI": ["CHANNELS_STR: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
+            "Escenario 4: Prueba de Sensibilidad PWM" : ["CHANNELS_TO_TEST: START: END: NETWORK_PROFILE:NOISE"],
+            "Ejecutar Rafaga De Rendimiento Funcional": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
             
+            # --- Tests Inyeccion Ruido Netstorm---
+            # "Escenario WP3: Activar Perfil NOISE en Netstorm": ["NETSTORM_IP: NETSTORM_VNC_PASS:"],
+            # "Escenario WP3: Activar Perfil CLEAN en Netstorm": ["NETSTORM_IP: NETSTORM_VNC_PASS:"],
             
             # --- Tests de Registro Cronológico ---
             "Retrieve Chronological Register": [],
@@ -413,6 +418,9 @@ class ModernTestRunnerApp(ctk.CTk):
                 elif msg_type == 'show_burst_report_window':
                     # message[2] = header, message[3] = rows, message[4] = filename
                     ui_tab_monitoring.open_burst_report_window(self, message[2], message[3], message[4])      # Omitimos message[1] ya que no necesitamos el session_id en este caso
+                elif msg_type == 'show_functional_report_window':
+                    # message[2] = summary_text, message[3] = header, message[4] = rows, message[5] = filename
+                    ui_tab_monitoring.open_functional_report_window(self, message[2], message[3], message[4], message[5])      # Omitimos message[1] ya que no necesitamos el session_id en este caso
                 
                 # *** MENSAJES DE DATOS (con session_id)*** Consideraremos a partir de aqui message[1] como session_id
                 else:

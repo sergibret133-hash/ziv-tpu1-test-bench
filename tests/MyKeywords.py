@@ -11,6 +11,8 @@ import csv
 import serial
 import time
 
+import statistics
+
 
 ACTIVE_APP_REF = None   # Referencia a la aplicación activa
 HIL_SOCKET = None       # Aqui guardaremos nuestra conexion
@@ -876,3 +878,163 @@ def log_pwm_step_test_result(filename, pulse_width_ms, t0_count, t5_count, succe
     with open(filename, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow([pulse_width_ms, t0_count, t5_count, f"{success_rate:.1f}", status])
+        
+        
+        
+        
+# REPORT PARA PRUEBAS FUNCIONALES
+def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_threshold_ms=15.0):
+    """
+    Genera un informe FUNCIONAL.
+    Se centra en la calidad de la señal (Latencia Total) y la Integridad de los datos.
+    Args:
+        max_latency_threshold_ms: Límite en ms. Si Latencia > limite -> FAIL.
+    """
+    # *** PARSEO Y CLASIFICACIÓN DE DATOS (hacemos lo mismo que en burst report)
+    traps_by_type = {"T1": [], "T2": [], "T3": [], "T4": []}
+    
+    # Procesamos Traps A y B
+    for trap in all_traps_a + all_traps_b:
+        t_type, t_time, t_val = _extract_trap_type_and_time(trap)
+        if t_type and (t_val == '1' or t_val is None):
+            epoch_t = _to_epoch(t_time)
+            if epoch_t: traps_by_type[t_type].append(epoch_t)
+
+    # Procesamos Logs RPi
+    t0_epochs = [float(t)/1e9 for t in rpi_logs.get('t0_ns', []) if t]
+    t5_epochs = [float(t)/1e9 for t in rpi_logs.get('t5_ns', []) if t]
+
+    num_cycles = len(t0_epochs)
+    print(f"INFO REPORT: Generando reporte funcional para {num_cycles} ciclos.")
+
+    # CORRELACION TEMPORAL DATOS
+    # Listas para almacenar resultados procesados
+    results_list = []
+    latencies = []
+    
+    # Contadores de Integridad (Cuántos se encontraron correlacionados con su T0)
+    integrity_counts = {"T0": num_cycles, "T1": 0, "T2": 0, "T3": 0, "T4": 0, "T5": 0}
+    
+    # Sets para evitar reusar índices (greedy logic). Los traps seran consumidos en orden FIFO
+    used_indices = {k: set() for k in ["T1", "T2", "T3", "T4", "T5"]}
+
+    # Ventanas de tiempo 
+    for i, t0_val in enumerate(t0_epochs):
+        cycle_data = {"id": i + 1, "status": "UNKNOWN", "latency": "N/A", "notes": ""}
+        
+        # *** Búsqueda en Cascada (lo hacemos más que nada para verificar la integridad traps snmp) ***
+        
+        # T1 (Input Trap)
+        t1_val, _ = find_closest_next(t0_val, traps_by_type["T1"], 0.030, 0.020, used_indices["T1"])
+        if t1_val: integrity_counts["T1"] += 1
+        
+        # T2 (TX Trap). Buscamos desde T1 (si reakmente existe), sino desde T0
+        ref_t2 = t1_val if t1_val else t0_val
+        t2_val, _ = find_closest_next(ref_t2, traps_by_type["T2"], WIN_PROC_TX, 0.005, used_indices["T2"])
+        if t2_val: integrity_counts["T2"] += 1
+
+        # T3 (RX Trap)
+        ref_t3 = t2_val if t2_val else ref_t2
+        t3_val, _ = find_closest_next(ref_t3, traps_by_type["T3"], WIN_CHANNEL, 0.005, used_indices["T3"])
+        if t3_val: integrity_counts["T3"] += 1
+
+        # T4 (Output Trap)
+        ref_t4 = t3_val if t3_val else ref_t3
+        t4_val, _ = find_closest_next(ref_t4, traps_by_type["T4"], WIN_PROC_OUT, 0.005, used_indices["T4"])
+        if t4_val: integrity_counts["T4"] += 1
+
+        # T5 (Output Físico)
+        t5_val, _ = find_closest_next(t0_val, t5_epochs, 0.100, 0.0, used_indices["T5"])
+        
+        if t5_val:
+            t5_val += HIL_CLOCK_OFFSET_S
+            integrity_counts["T5"] += 1
+            
+            # Cálculo de Latencia
+            delta_sec = t5_val - t0_val
+            delta_ms = delta_sec * 1000.0
+            
+            cycle_data["latency"] = round(delta_ms, 3)
+            latencies.append(delta_ms)
+            
+            # Evaluación PASS/FAIL
+            if delta_ms <= float(max_latency_threshold_ms):
+                cycle_data["status"] = "PASS"
+            else:
+                cycle_data["status"] = "FAIL (LATE)"
+        else:
+            cycle_data["status"] = "FAIL (MISSING OUT)"
+            cycle_data["notes"] = "No se detectó cierre de contacto (T5)"
+
+        results_list.append(cycle_data)
+
+    # *** CÁLCULO DE ESTADÍSTICAS GLOBALES ***
+    if latencies:
+        min_lat = min(latencies)
+        max_lat = max(latencies)
+        avg_lat = statistics.mean(latencies)
+        try:
+            jitter = statistics.stdev(latencies)
+        except:
+            jitter = 0.0 # Si solo hay 1 dato
+        
+        pass_count = sum(1 for r in results_list if "PASS" in r["status"])  # Contamos los PASS
+        success_rate = (pass_count / num_cycles) * 100.0
+    else:
+        min_lat, max_lat, avg_lat, jitter, success_rate = 0, 0, 0, 0, 0.0   # Si no hay latencias registradas, todo a 0
+
+    # *** GENERACIÓN DEL CSV ***
+    filename = f"test_results/functional_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    os.makedirs("test_results", exist_ok=True)
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        
+        # SECCIÓN 1: RESUMEN FUNCIONAL
+        writer.writerow(["*** FUNCTIONAL SUMMARY ***"])
+        writer.writerow(["Test Date", datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
+        writer.writerow(["Total Cycles (T0)", num_cycles])
+        writer.writerow(["Threshold (ms)", max_latency_threshold_ms])
+        writer.writerow(["Success Rate (%)", f"{success_rate:.2f}%"])
+        writer.writerow([]) 
+
+        # SECCIÓN 2: ESTADÍSTICAS DE LATENCIA
+        writer.writerow(["*** LATENCY STATISTICS (ms) ***"])
+        writer.writerow(["Minimum", f"{min_lat:.3f}"])
+        writer.writerow(["Maximum", f"{max_lat:.3f}"])
+        writer.writerow(["Average", f"{avg_lat:.3f}"])
+        writer.writerow(["Jitter (Std Dev)", f"{jitter:.3f}"])
+        writer.writerow([])
+
+        # SECCIÓN 3: INTEGRIDAD DE SEÑAL
+        writer.writerow(["*** SIGNAL INTEGRITY CHECK ***"])
+        writer.writerow(["Stage", "Expected (T0 Based)", "Actual (Correlated)", "Missing Count", "Availability %"])
+        
+        stages = ["T1 (Input Trap)", "T2 (TX Trap)", "T3 (RX Trap)", "T4 (Output Trap)", "T5 (Physical Out)"]
+        keys = ["T1", "T2", "T3", "T4", "T5"]
+
+        for stage, key in zip(stages, keys):
+            actual = integrity_counts[key]
+            missing = num_cycles - actual
+            avail = (actual / num_cycles) * 100.0 if num_cycles > 0 else 0
+            writer.writerow([stage, num_cycles, actual, missing, f"{avail:.1f}%"])
+        
+        writer.writerow([])
+
+        # SECCIÓN 4: DETALLE FUNCIONAL
+        writer.writerow(["*** CYCLE DETAILS ***"])
+        writer.writerow(["Cycle", "Total Latency (ms)", "Status", "Notes"])
+        
+        for row in results_list:
+            writer.writerow([
+                row["id"], 
+                row["latency"], 
+                row["status"], 
+                row["notes"]
+            ])
+
+    print(f"FUNCTIONAL REPORT generado: {filename}")
+    return filename
+
+
+

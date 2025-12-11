@@ -571,3 +571,60 @@ class MonitoringController:
         except Exception as e:
             print(f"Error al abrir reporte: {e}")
             self.app_ref.gui_queue.put(('main_status', f"Error abriendo reporte: {e}", "red"))
+    
+    
+    
+    
+    
+    def view_lastest_functional_report(self):
+        """Busca el último CSV funcional de ráfaga generado y envía los datos a la GUI """
+        try:
+            list_of_files = glob.glob(os.path.join("test_results", "functional_report_*.csv"))   # Busca todos los archivos que haya en el directorio de nuestro disco duro Y NOS DEVUELVE UNA LISTA. 
+            #os.path.loin es para separar el directorio por la barra \ / necesaria para cada SO
+            if not list_of_files:
+                self.app_ref.gui_queue.put(('main_status', "No se encontraron informes funcionales de ráfaga.", "orange"))
+                return
+            
+            latest_file = max(list_of_files, key=os.path.getctime)  # getctime nos devuelve el timestamp de la creacion de un archivo. COn la función max, nos devuelve el archivo con fecha timestamp más "grande"(más reciente)
+            
+            # Leemos el .csv
+            summary_lines = []
+            header = []
+            data_rows = []
+            reading_cycles_table = False
+
+            with open(latest_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                
+                for row in reader:
+                    if not row:
+                        if not reading_cycles_table:
+                            summary_lines.append("")
+                            continue
+                    
+                    
+                    # Para guardar la cabecera y pasar a la siguiente iteración, activando flag reading_cycles_table que nos indica que estamos guardando datos de tipo data_rows (tabla de ciclos)
+                    if "*** CYCLE DETAILS ***" in row[0]:   # Si detectamos este titulo en la 1a columna de la fila que estamos iterando
+                        try:
+                            header = next(reader)   # Guardamos la siguiente fila, que es la cabecera de la tabla de ciclos
+                            reading_cycles_table = True     # Ahora que sabemos que estamos leyendo la tabla de ciclos podemos activar el flag
+                            continue    # Saltamos a la siguiente iteracion directamente
+                        except StopIteration:
+                            break
+                    
+                    if reading_cycles_table:    # Si el flag que indica que estamos ya en la tabla de ciclos está activo, como nos hemos guardado antes ya la cabecera y hemos saltado a la siguiente iteración ->
+                        data_rows.append(row)   # -> Podemos ir añadiendo las filas de datos, GUARDÁNDOLAS EN LA LISTA data_rows
+                    else: # estamos en la tabla resumen
+                        line_text = " | ".join(row) # Unimos columnas con una barra para que se lea bien
+                        summary_lines.append(line_text)     # GUARDAMOS LA FILA FORMATADA EN LA LISTA summary_lines
+            
+            summary_text = "\n".join(summary_lines)
+            
+            # Enviamos a la cola de la GUI para que abra la ventana
+            # Enviamos: (TIPO_MENSAJE, session_id en este caso no lo necesitamos (ponemos None), summary_text, header, data_rows, filename)
+            self.app_ref.gui_queue.put(('show_functional_report_window', None, summary_text, header, data_rows, os.path.basename(latest_file)))
+            self.app_ref.gui_queue.put(('main_status', f"Abriendo informe funcional: {os.path.basename(latest_file)}", "green"))
+            
+        except Exception as e:
+            print(f"Error al abrir reporte: {e}")
+            self.app_ref.gui_queue.put(('main_status', f"Error abriendo reporte funcional: {e}", "red"))

@@ -610,31 +610,42 @@ def _populate_verification_report_tab(app_ref, tab_frame):
     tab_frame.grid_columnconfigure(0, weight=1)
     tab_frame.grid_rowconfigure(2, weight=1)
 
-    # Frame transparent per organitzar els botons de carregar informe i el d'obrir widget del report de rendiment
+    # Frame transparent per organitzar els botons de carregar informe .csv de les tasques "Verificació de Traps" i d'obrir widgets dels report de rendiment i funcional
     header_frame = ctk.CTkFrame(tab_frame, fg_color="transparent")
     header_frame.grid(row=0, column=0, padx=20, pady=10, sticky="ew")
     
-    
-    # Botón para cargar el archivo CSV
-    load_button = ctk.CTkButton(
-        header_frame, 
-        text="Cargar Informe de Verificación (.csv)...", 
-        command=app_ref.monitoring_controller._load_verification_report,
-        fg_color="#2464ad",
-        width=210
-    )
-    load_button.pack(side="right")
-    
-    # Botón para ver el informe de Rafaga (rendimiento)
-    bttn_burst_view = ctk.CTkButton(
+    # Boton para ver el informe de Rafaga (rendimiento)
+    button_burst_view = ctk.CTkButton(
         header_frame,
         text="Ver Último Informe Rafaga",
         command=app_ref.monitoring_controller.view_lastest_burst_report,
         fg_color="#E9A342",
         width = 210
     )
-    bttn_burst_view.pack(side="right", padx=(0, 10))
+    button_burst_view.pack(side="right", padx=(0, 10))
 
+    # Boton para ver el informe FUNCIONAL de Rafaga
+    button_funct_report = ctk.CTkButton(
+        header_frame,
+        text="Ver Último Informe Funcional",
+        command=app_ref.monitoring_controller.view_lastest_functional_report,
+        fg_color="#24AA77",
+        width = 210
+    )
+    button_funct_report.pack(side="right", padx=(0, 10))
+    
+    # Botón para cargar el archivo CSV 
+    load_button = ctk.CTkButton(
+        header_frame, 
+        text="Cargar Informe de Verificación Traps (.csv)...", 
+        command=app_ref.monitoring_controller._load_verification_report,
+        fg_color="#2464ad",
+        width=210
+    )
+    load_button.pack(side="right")
+    
+    
+    # *************** FRAME VISUALIZACIÓN ARCHIVO .CSV VERIFICACIÓN DE TRAPS ***************
     # Etiqueta para mostrar el archivo actual
     app_ref.verification_report_file_label = ctk.CTkLabel(
         tab_frame, 
@@ -729,9 +740,9 @@ def open_burst_report_window(parent_app, header, rows, filename):
     IDX_PROC_RX = 4
     
     # Etiquetas para el Treeview
-    tree.tag_configure('performance_fail', foreground="#f0be1b", font=("Arial", 10, "bold")) # Naranja 
-    tree.tag_configure('missing_data', foreground="#f34d00") # Rojo brillante
-    tree.tag_configure('average_row', foreground="#1DC4D6", font=("Arial", 10, "bold"))
+    tree.tag_configure('performance_fail', foreground="#e49e1b", font=("Arial", 10, "bold")) # Naranja 
+    tree.tag_configure('missing_data', foreground="#d13a1f") # Rojo brillante
+    tree.tag_configure('average_row', foreground="#1DA2D6", font=("Arial", 10, "bold"))
     
     for item in rows:
         # Si la fila está vacía (recordemos que hemos dejado una separación antes de la fila de averages), LA SALTAMOS!
@@ -780,3 +791,91 @@ def open_burst_report_window(parent_app, header, rows, filename):
     # Boton de Cerrar
     close_bttn = ctk.CTkButton(report_window, text="cerrar", command=report_window.destroy, fg_color="red")
     close_bttn.pack(pady=10)
+
+
+def open_functional_report_window(parent_app, summary_text, header, rows, filename):
+    """Crea un widget flotante con una tabla para poder ver los resultados funcionales de la rafaga enviada. Recibe 'parent_app' para poder centrar la ventana o hacerla modal sobre la app principal
+    - Parte Superior: TextBox con el Resumen y Estadísticas.
+    - Parte Inferior: Tabla coloreada con los detalles de ciclos.
+    """
+    # Configuración de la ventana
+    report_window = ctk.CTkToplevel(parent_app)
+    report_window.title(f"Reporte Funcional: {filename}")
+    report_window.geometry("1000x750")
+    report_window.attributes("-topmost", True)  #Para que aparezca al frente 
+    
+    # *** FRAME PRINCIPAL ***
+    main_frame = ctk.CTkFrame(report_window)
+    main_frame.pack(fill="both", expand = True, padx=10, pady=10)
+    
+    # *** SECCION SUPERIOR ***
+    top_section_label = ctk.CTkLabel(main_frame, text=f"RESUMEN Y ESTADISTICAS {filename}", font = ("Roboto", 14, "bold") )
+    top_section_label.pack(pady=(5,0))
+    
+    summary_box = ctk.CTkTextbox(main_frame, height=200, font=("Consolas", 12)) #Mas facil de alinear datos con esta fuenbte
+    summary_box.pack(fill="x", padx=5, pady=5)
+    
+    summary_box.insert("1.0", summary_text)     # Añadimos el texto en el box que hemos creado
+    summary_box.configure(state="disabled")     # No permitimos escribir
+    
+    # *** SECCION INFERIOR ***
+    bottom_section_label = ctk.CTkLabel(main_frame, text="DETALLE DE CICLOS", font=("Roboto", 14, "bold"))
+    bottom_section_label.pack(pady=(15,0))
+    # Frame del contenedor
+    table_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+    table_frame.pack(fill="both", expand=True, padx=5, pady=5)
+    
+    # Estil i taula
+    style = ttk.Style()
+    style.theme_use("clam")     # De esta manera podemos modificar colores de una forma mas facil
+    style.configure("Treeview", background="#2e2e2e", foreground="white", fieldbackground="#1D1D1D", rowheight=30, font=("Arial", 10))
+    # Estilo de la cabecera
+    style.configure("Treeview.Heading", background="#404040", foreground="white", relief="flat", font=("Arial", 10, "bold"))
+    # Cambio de color al pasar el raton
+    style.map("Treeview.Heading", background=[('active', "#555555")])
+    # Color de seleccion de fila
+    style.map('Treeview', background=[('selected',"#1d528f")])
+
+    
+    # Creamos la tabla
+    columns = header
+    tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+    
+    # Configuramos cabecera y ancho de columnas
+    for col in columns:
+        tree.heading(col, text=col)
+        tree.column(col, anchor="center", width=120)
+    
+    # Configuramsos colores, tags
+    tree.tag_configure('pass', foreground="#1CC562")
+    tree.tag_configure('late', foreground="#CA701C", font=("Arial", 10, "bold"))
+    tree.tag_configure('late', foreground="#CA1C1C", font=("Arial", 10, "bold"))
+    
+    # Insertamos datos
+    for item in rows:
+        if not item or len(item) < 3: continue
+        
+        status_text = item[2].upper()   # La columna 3 es STATUS
+        tags = []
+        
+        if "PASS" in status_text:
+            tags.append('pass')
+        elif "LATE" in status_text:
+            tags.append('late')
+        elif "FAIL" in status_text or "MISSING" in status_text:
+            tags.append('fail')
+        tree.insert("", "end", values=item, tags=tuple(tags)) 
+        
+    # Scrollbars
+    vertsb = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+    tree.configure(yscrollcommand=vertsb.set)
+    
+    tree.pack(side="left", fill="both", expand=True)
+    vertsb.pack(side="right", fill="y")
+    
+    # Boton cerrar
+    close_button = ctk.CTkButton(report_window, text="Cerrar", fg_color="red", command=report_window.destroy)
+    close_button.pack(pady=10)
+        
+        
+    
