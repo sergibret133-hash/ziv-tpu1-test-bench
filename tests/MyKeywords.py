@@ -883,7 +883,7 @@ def log_pwm_step_test_result(filename, pulse_width_ms, t0_count, t5_count, succe
         
         
 # REPORT PARA PRUEBAS FUNCIONALES
-def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_threshold_ms=15.0):
+def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_threshold_ms=15.0, output_subdir=None):
     """
     Genera un informe FUNCIONAL.
     Se centra en la calidad de la señal (Latencia Total) y la Integridad de los datos.
@@ -983,9 +983,20 @@ def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_t
     else:
         min_lat, max_lat, avg_lat, jitter, success_rate = 0, 0, 0, 0, 0.0   # Si no hay latencias registradas, todo a 0
 
+
     # *** GENERACIÓN DEL CSV ***
-    filename = f"test_results/functional_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    os.makedirs("test_results", exist_ok=True)
+    # Gestion de directorios
+    if output_subdir:
+        # Si nos pasan un subdirectorio, lo usamos
+        save_dir = output_subdir
+    else:
+        # Por defecto
+        save_dir = "test_results"
+        
+    os.makedirs(save_dir, exist_ok=True)
+    
+    filename = os.path.join(save_dir, f"functional_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+
     
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
@@ -1034,7 +1045,83 @@ def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_t
             ])
 
     print(f"FUNCTIONAL REPORT generado: {filename}")
-    return filename
+    return filename, success_rate
 
 
+def generate_storm_report(rpi_logs):
+    """
+    Genera un reporte para el Escenario C (Tormenta de Red) de las pruebas HIL con Inyección de ruido (WP3).
+    En este informe NO se usan ventanas de tiempo! ya que no queremos descartar duplicados. 
+    Solo contamos todo lo que entra y sale.
+    """
+    # Extraemos datos crudos (sin traps)
+    t0_list = rpi_logs.get('t0_ns', [])
+    t5_list = rpi_logs.get('t5_ns', [])
+    
+    count_t0 = len(t0_list)
+    count_t5 = len(t5_list)
+    
+    # Validación del conteo
+    status = "UNKNOWN"
+    notes = ""
+    
+    if count_t5 == count_t0:
+        status = "PASS"
+        notes = "Conteo correcto. #T0 = #T5 -> El equipo ha filtrado correctamente disparos duplicados o no hubo ecos."
+    elif count_t5 > count_t0:
+        status = "FAIL (DUPLICATES)"
+        diff = count_t5 - count_t0
+        notes = f"PELIGRO: Se han detectado {diff} disparos extra :( (Falsos Positivos)."
+    elif count_t5 < count_t0:
+        status = "FAIL (LOSS)"
+        diff = count_t0 - count_t5
+        notes = f"Se han perdido {diff} disparos."
 
+    # Generamos el CSV
+    filename = f"test_results/storm_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    os.makedirs("test_results", exist_ok=True)
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        
+        # *** CABECERA-RESUMEN ***
+        writer.writerow(["*** NETWORK STORM INTEGRITY REPORT ***"])
+        writer.writerow(["Test Date", datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
+        writer.writerow(["Global Status", status])
+        writer.writerow([])
+        
+        # TABLA DE CONTEO
+        writer.writerow(["*** EVENT COUNT ***"])
+        writer.writerow(["Metric", "Count", "Expected"])
+        writer.writerow(["Inputs (T0)", count_t0, "-"])
+        writer.writerow(["Outputs (T5)", count_t5, f"== {count_t0}"])
+        writer.writerow([])
+        
+        # VERIFICAMOS LA INTEGRIDAD
+        writer.writerow(["*** ANALYSIS ***"])
+        writer.writerow(["Notes", notes])
+        if count_t5 > count_t0:
+             writer.writerow(["WARNING", "El sistema ha generado más outputs que inputs :("])
+             writer.writerow(["IMPACT", "Hay riesgo de que se produzcan múltiples disparos en la IPTU del equipo B."])
+        writer.writerow([])
+
+        # EVIDENCIA CON TIMESTAMPS
+        # Listamos los T5 para ver si están muy pegados (de esta manera es mas facil localizar rebotes)
+        writer.writerow(["*** OUTPUT TIMESTAMPS (T5) ***"])
+        writer.writerow(["Index", "Timestamp (s)", "Delta vs Prev (ms)"])
+        
+        t5_secs = [float(t)/1e9 for t in t5_list]   # Pasamos a s
+        t5_secs.sort()  # Ordenamos la lista de timestamps T5 en orden ascendente (más antiguos a más nuevos)
+        
+        for i, t5 in enumerate(t5_secs):
+            delta = 0.0 # Inicializamos
+            if i > 0:   # COn el primer indice no podemos calcular delta
+                delta = (t5 - t5_secs[i-1]) * 1000.0    # Calculamos delta pasandolo a ms
+            
+            # Marcamos si el delta es muy pequeño (< 10ms). Esto nos idicará si hay presencia de un rebote rápido
+            marker = " <<< REBOTE/DUPLICADO" if (i > 0 and delta < 20.0) else ""
+            
+            writer.writerow([i+1, f"{t5:.6f}", f"{delta:.3f}", marker])     # Formatamos para que se vea bien
+
+    print(f"STORM REPORT generado: {filename}")
+    return filename, status, count_t0, count_t5

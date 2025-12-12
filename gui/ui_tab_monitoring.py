@@ -634,6 +634,18 @@ def _populate_verification_report_tab(app_ref, tab_frame):
     )
     button_funct_report.pack(side="right", padx=(0, 10))
     
+    # Boton para ver el informe FUNCIONAL de Rafaga
+    button_break_view = ctk.CTkButton(
+        header_frame,
+        text="📈 Ver Resumen WP3 Escenario B",
+        command=app_ref.monitoring_controller.view_latest_breakpoint_summary,
+        fg_color="#3DBE38", # Un color rojizo para diferenciar
+        width = 210
+    )
+    button_break_view.pack(side="right", padx=(0, 10))
+    
+    
+    
     # Botón para cargar el archivo CSV 
     load_button = ctk.CTkButton(
         header_frame, 
@@ -878,4 +890,39 @@ def open_functional_report_window(parent_app, summary_text, header, rows, filena
     close_button.pack(pady=10)
         
         
+def open_breakpoint_window(parent_app, header, rows, folder_name):
+    """ Ventana para ver la tabla-resumen de la prueba WP3 Escenario B """
+    report_window = ctk.CTkToplevel(parent_app)
+    report_window.title(f"Análisis de Ruptura: {folder_name}")
+    report_window.geometry("600x400")
+    report_window.attributes("-topmost", True)
     
+    label = ctk.CTkLabel(report_window, text=f"Resultados del Stress Test\n({folder_name})", font=("Roboto", 16, "bold"))
+    label.pack(pady=10)
+    
+    # Tabla
+    table_frame = ctk.CTkFrame(report_window)
+    table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    
+    style = ttk.Style()
+    style.theme_use("clam")
+    
+    columns = header # ["Perfil", "Disponibilidad (%)", "Status"]
+    tree = ttk.Treeview(table_frame, columns=columns, show="headings")
+    
+    for col in columns:
+        tree.heading(col, text=col)
+        tree.column(col, anchor="center")
+    
+    # Cnfiguramos los tags
+    tree.tag_configure('PASS', foreground="green")
+    tree.tag_configure('FAIL', foreground="red", font=("Arial", 10, "bold"))
+    
+    for row in rows:
+        tag = 'PASS' if row[2] == 'PASS' else 'FAIL'        # row[2] es el Status
+        tree.insert("", "end", values=row, tags=(tag,))     # Sobreescribimos la fila con lo que haya configurado en el tag que se haya decidido en al linea de codgo anterior
+        
+    tree.pack(fill="both", expand=True)
+    
+    close_button = ctk.CTkButton(report_window, text="Cerrar", command=report_window.destroy)
+    close_button.pack(pady=10)

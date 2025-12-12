@@ -51,6 +51,25 @@ class NetstormController:
         """ Carga los perfiles 01_CLEAN.cfg o 02_NOISE .cfg en Netstorm via VNC """
         p_num = int(profile_number)
         
+        if p_num == 1:
+            filename = "01_CLEAN"
+        elif p_num == 2:
+            filename = "02_NOISE"
+        elif p_num == 3:
+            filename = "03_STORM"
+        # Archivos .cfg para escenario B, Test Loss Breakpoint Analysis
+        # elif p_num == 4:
+        #     filename = ""
+        # elif p_num == 5:
+        #     filename = ""
+        # elif p_num == 6:
+        #     filename = ""
+        # elif p_num == 7:
+        #     filename = ""
+            
+        else:
+            filename = ""    
+            
         filename = "01_CLEAN" if p_num == 1 else "02_NOISE"
         print(f"VNC: Cargando perfil {filename}.cfg en Netstorm...")
         
@@ -90,6 +109,21 @@ class NetstormController:
             self.client.keyPress('up')    # Nos aseguramos de estar arriba
         elif p_num == 2:
             self.client.keyPress('down')  # Bajamos al perfil 02_NOISE
+            
+        elif p_num == 3:
+            self.client.keyPress('down')
+            time.sleep(0.2)
+            self.client.keyPress('down')  # Bajamos dos veces para escoger el perfil 03_STORM
+        
+        # Perfiles para escenario B, Test Loss Breakpoint Analysis
+        # elif p_num == 4:
+        #     
+        # elif p_num == 5:
+        #   
+        # elif p_num == 6:
+        #     
+        # elif p_num == 7:
+        #     
         
         self.client.keyPress('enter') # Seleccionamos el perfil
         time.sleep(0.5)
@@ -133,14 +167,17 @@ def disconnect_from_netstorm():
         _vnc_netstorm = None
 
 def set_network_profile(profile_name):
-    """ Llamamos a load_profile con el numero de perfil correspondiente al nombre pasado como argumento en este método """
+    """ Mapea nombres a números de perfil """
     if profile_name == "CLEAN":
         _vnc_netstorm.load_profile(1)
     elif profile_name == "NOISE":
         _vnc_netstorm.load_profile(2)
+    elif profile_name == "STORM":
+        _vnc_netstorm.load_profile(3)
+    # Mapeo de perfiles escenario B, Test Loss Breakpoint Analysis
+    # elif
     else:
         print(f"No se reconoce el perfil pasado como argumento: {profile_name}")
-        print("Los perfiles disponibles son: CLEAN, NOISE")
         
 def toggle_noise():
     """ Inicia la inyección de ruido en Netstorm """

@@ -421,6 +421,13 @@ class ModernTestRunnerApp(ctk.CTk):
                 elif msg_type == 'show_functional_report_window':
                     # message[2] = summary_text, message[3] = header, message[4] = rows, message[5] = filename
                     ui_tab_monitoring.open_functional_report_window(self, message[2], message[3], message[4], message[5])      # Omitimos message[1] ya que no necesitamos el session_id en este caso
+                elif msg_type == 'show_breakpoint_window':
+                    # args: _, header, rows, folder_name
+                    ui_tab_monitoring.open_breakpoint_window(self, message[2], message[3], message[4])      # Omitimos message[1] ya que no necesitamos el session_id en este caso
+                
+                
+                
+                
                 
                 # *** MENSAJES DE DATOS (con session_id)*** Consideraremos a partir de aqui message[1] como session_id
                 else:

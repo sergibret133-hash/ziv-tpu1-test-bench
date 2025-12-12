@@ -628,3 +628,41 @@ class MonitoringController:
         except Exception as e:
             print(f"Error al abrir reporte: {e}")
             self.app_ref.gui_queue.put(('main_status', f"Error abriendo reporte funcional: {e}", "red"))
+            
+    
+    
+    def view_latest_breakpoint_summary(self):
+        """ Busca el último archivo summary_breakpoint.csv y lo muestra """
+        try:
+            # Buscamos en todas las subcarpetas de test_results, ya que recordemos que los reports de WP3 Escenario B los guardamos en subcarpetas! 
+            # El patrón es test_results/**/summary_breakpoint.csv
+            pattern_for_search = os.path.join("test_results", "**", "summary_breakpoint.csv")
+            list_of_files = glob.glob(pattern_for_search, recursive=True)
+            
+            if not list_of_files:   # Si no encontramos ningun archivo con el patron que queremos ->
+                self.app_ref.gui_queue.put(('main_status', "No se encontraron resúmenes de LOSS Breakpoint.", "orange"))
+                return  # Salimos de la función y no abrimos nada
+            
+            # Cogemos el más reciente
+            latest_file = max(list_of_files, key=os.path.getctime)
+            
+            # Leemos los datos
+            header = []
+            data_rows = []
+            
+            with open(latest_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                try:
+                    header = next(reader)   # Cabecera
+                    for row in reader:
+                        data_rows.append(row)   # Filas con los datos
+                except StopIteration:
+                    pass
+
+            # Usamos una nueva ventana simple para esto
+            filename = os.path.basename(os.path.dirname(latest_file)) # Usamos el nombre de la carpeta (timestamp) como referencia, ya que es mas enteendible
+            self.app_ref.gui_queue.put(('show_breakpoint_window', None, header, data_rows, filename))   # Como siempre, en la visualizacio de los reports no es necesario indicar el session_id -> Le asignamos "None"
+            
+        except Exception as e:
+            print(f"Error breakpoint view: {e}")
+            self.app_ref.gui_queue.put(('main_status', f"Error visualizando el report de WP3 Escenario B: {e}", "red"))
