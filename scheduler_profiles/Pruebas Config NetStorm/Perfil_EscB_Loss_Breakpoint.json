@@ -1,0 +1,56 @@
+[
+    {
+        "type": "Ejecutar Test",
+        "name": "Escenario WP3: Activar Perfil CLEAN en Netstorm (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Configurar Perfil Personalizado (Universal) (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "PROFILE_NAME:05_WP3_Loss_10.cfg LOSS_MODE:random LOSS_PROBABILITY:10 DELAY_MODE:None",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Configurar Perfil Personalizado (Universal) (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "PROFILE_NAME:06_WP3_Loss_20.cfg LOSS_MODE:random LOSS_PROBABILITY:20 DELAY_MODE:None",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Configurar Perfil Personalizado (Universal) (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "PROFILE_NAME:07_WP3_Loss_40.cfg LOSS_MODE:random LOSS_PROBABILITY:40 DELAY_MODE:None",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Configurar Perfil Personalizado (Universal) (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "PROFILE_NAME:08_WP3_Loss_60.cfg LOSS_MODE:random LOSS_PROBABILITY:60 DELAY_MODE:None",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Configurar Perfil Personalizado (Universal) (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "PROFILE_NAME:09_WP3_Loss_80.cfg LOSS_MODE:random LOSS_PROBABILITY:80 DELAY_MODE:None",
+        "param": ""
+    }
+]

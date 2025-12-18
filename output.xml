@@ -1,41 +1,374 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<robot generator="Robot 7.2.2 (Python 3.9.12 on win32)" generated="2025-12-10T15:31:17.109227" rpa="false" schemaversion="5">
-<suite id="s1" name="HIL Netstorm Control" source="c:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\tests\HIL_Netstorm_Control.robot">
-<test id="s1-t1" name="Escenario WP3: Togglear Ruido en Netstorm" line="28">
+<robot generator="Robot 7.2.2 (Python 3.9.12 on win32)" generated="2025-12-17T12:23:02.497669" rpa="false" schemaversion="5">
+<suite id="s1" name="HIL Tests" source="c:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\tests\HIL_Tests.robot">
+<test id="s1-t1" name="WP3 Escenario B Loss_Brakepoint" line="283">
+<kw name="Setup Con Control de Red" type="SETUP">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n&gt;&gt;&gt; [SETUP] Perfil Solicitado: ${profile_override}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.322354" elapsed="0.000995"/>
+</kw>
+<if>
+<branch type="IF" condition="'${profile_override}' != 'NONE'">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n&gt;&gt;&gt; [SETUP] Activando Control de Red: ${profile_override}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:04.324695" elapsed="0.000000"/>
+</kw>
 <kw name="Connect To Netstorm" owner="netstorm_controller">
 <arg>${NETSTORM_IP}</arg>
 <arg>${NETSTORM_VNC_PASS}</arg>
 <doc>Conecta al Netstorm via VNC</doc>
-<status status="PASS" start="2025-12-10T15:31:18.714160" elapsed="0.035033"/>
+<status status="NOT RUN" start="2025-12-17T12:23:04.324695" elapsed="0.000000"/>
+</kw>
+<kw name="Set Network Profile" owner="netstorm_controller">
+<arg>${profile_override}</arg>
+<doc>Mapea nombres a números de perfil</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:04.326040" elapsed="0.000000"/>
 </kw>
 <kw name="Log To Console" owner="BuiltIn">
-<arg>Haciendo Toggle de Ruido</arg>
+<arg>Esperamos 3s a que el ruido se estabilice...</arg>
 <doc>Logs the given message to the console.</doc>
-<status status="PASS" start="2025-12-10T15:31:18.749193" elapsed="0.000000"/>
+<status status="NOT RUN" start="2025-12-17T12:23:04.326040" elapsed="0.000000"/>
 </kw>
-<kw name="Toggle Noise" owner="netstorm_controller">
-<msg time="2025-12-10T15:31:19.304038" level="INFO">VNC: Activando inyección de ruido..</msg>
-<doc>Inicia la inyección de ruido en Netstorm</doc>
-<status status="PASS" start="2025-12-10T15:31:18.760414" elapsed="0.543624"/>
+<kw name="Sleep" owner="BuiltIn">
+<arg>3s</arg>
+<doc>Pauses the test executed for the given time.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:04.326040" elapsed="0.000000"/>
 </kw>
-<kw name="Disconnect From Netstorm" owner="netstorm_controller" type="TEARDOWN">
-<msg time="2025-12-10T15:31:19.309514" level="INFO">VNC: Desconectando de Netstorm...</msg>
-<doc>Desconecta la sesión VNC del Netstorm</doc>
-<status status="PASS" start="2025-12-10T15:31:19.309514" elapsed="0.004071"/>
+<status status="NOT RUN" start="2025-12-17T12:23:04.323349" elapsed="0.003697"/>
+</branch>
+<status status="PASS" start="2025-12-17T12:23:04.323349" elapsed="0.003697"/>
+</if>
+<doc>Si se pide perfil de red, conecta al Netstorm y aplica el perfil. Si NETWORK_PROFILE es NONE, no hace nada (comportamiento clásico).</doc>
+<status status="PASS" start="2025-12-17T12:23:04.320067" elapsed="0.006979"/>
 </kw>
-<status status="PASS" start="2025-12-10T15:31:18.714160" elapsed="0.602423"/>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>*** INICIANDO BÚSQUEDA DEL PUNTO DE RUPTURA ***</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.327046" elapsed="0.000000"/>
+</kw>
+<kw name="Get Current Date" owner="DateTime">
+<msg time="2025-12-17T12:23:04.335610" level="INFO">${timestamp} = 20251217_122304</msg>
+<var>${timestamp}</var>
+<arg>result_format=%Y%m%d_%H%M%S</arg>
+<doc>Returns current local or UTC time with an optional increment.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.334610" elapsed="0.015409"/>
+</kw>
+<kw name="Set Variable" owner="BuiltIn">
+<msg time="2025-12-17T12:23:04.359033" level="INFO">${test_folder} = test_results\breakpoint_20251217_122304</msg>
+<var>${test_folder}</var>
+<arg>test_results${/}breakpoint_${timestamp}</arg>
+<doc>Returns the given values which can then be assigned to a variables.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.352027" elapsed="0.007006"/>
+</kw>
+<kw name="Create Directory" owner="OperatingSystem">
+<msg time="2025-12-17T12:23:04.372083" level="INFO" html="true">Created directory '&lt;a href="file://C:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\test_results\breakpoint_20251217_122304"&gt;C:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\test_results\breakpoint_20251217_122304&lt;/a&gt;'.</msg>
+<arg>${test_folder}</arg>
+<doc>Creates the specified directory.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.363400" elapsed="0.012715"/>
+</kw>
+<kw name="Set Variable" owner="BuiltIn">
+<msg time="2025-12-17T12:23:04.381635" level="INFO">${summary_file} = test_results\breakpoint_20251217_122304\summary_breakpoint.csv</msg>
+<var>${summary_file}</var>
+<arg>${test_folder}${/}summary_breakpoint.csv</arg>
+<doc>Returns the given values which can then be assigned to a variables.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.378120" elapsed="0.003515"/>
+</kw>
+<kw name="Create File" owner="OperatingSystem">
+<msg time="2025-12-17T12:23:04.392348" level="INFO" html="true">Created file '&lt;a href="file://C:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\test_results\breakpoint_20251217_122304\summary_breakpoint.csv"&gt;C:\Users\sergio.bret\OneDrive - alfanar\Escritorio\ZIV\TFG\Proyecto\test_results\breakpoint_20251217_122304\summary_breakpoint.csv&lt;/a&gt;'.</msg>
+<arg>${summary_file}</arg>
+<arg>Perfil,Disponibilidad (%),Status\n</arg>
+<doc>Creates a file with the given content and encoding.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.383640" elapsed="0.008708"/>
+</kw>
+<for flavor="IN">
+<iter>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n PROBANDO PERFIL: ${profile}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.398089" elapsed="0.002304"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Limpiando red...</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.400393" elapsed="0.000000"/>
+</kw>
+<kw name="Setup Con Control de Red">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n&gt;&gt;&gt; [SETUP] Perfil Solicitado: ${profile_override}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.405419" elapsed="0.005807"/>
+</kw>
+<if>
+<branch type="IF" condition="'${profile_override}' != 'NONE'">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n&gt;&gt;&gt; [SETUP] Activando Control de Red: ${profile_override}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:04.413448" elapsed="0.002992"/>
+</kw>
+<kw name="Connect To Netstorm" owner="netstorm_controller">
+<arg>${NETSTORM_IP}</arg>
+<arg>${NETSTORM_VNC_PASS}</arg>
+<doc>Conecta al Netstorm via VNC</doc>
+<status status="PASS" start="2025-12-17T12:23:04.418434" elapsed="0.044025"/>
+</kw>
+<kw name="Set Network Profile" owner="netstorm_controller">
+<msg time="2025-12-17T12:23:12.185848" level="INFO">VNC: Cargando perfil  en Netstorm...
+VNC: Perfil cargado.</msg>
+<arg>${profile_override}</arg>
+<doc>Mapea nombres a números de perfil</doc>
+<status status="PASS" start="2025-12-17T12:23:04.462459" elapsed="7.723389"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Esperamos 3s a que el ruido se estabilice...</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:12.186896" elapsed="0.001154"/>
+</kw>
+<kw name="Sleep" owner="BuiltIn">
+<msg time="2025-12-17T12:23:15.203601" level="INFO">Slept 3 seconds.</msg>
+<arg>3s</arg>
+<doc>Pauses the test executed for the given time.</doc>
+<status status="PASS" start="2025-12-17T12:23:12.188050" elapsed="3.016420"/>
+</kw>
+<status status="PASS" start="2025-12-17T12:23:04.412408" elapsed="10.792062"/>
+</branch>
+<status status="PASS" start="2025-12-17T12:23:04.411226" elapsed="10.793244"/>
+</if>
+<arg>profile_override=CLEAN</arg>
+<doc>Si se pide perfil de red, conecta al Netstorm y aplica el perfil. Si NETWORK_PROFILE es NONE, no hace nada (comportamiento clásico).</doc>
+<status status="PASS" start="2025-12-17T12:23:04.400393" elapsed="10.805150"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>CARGANDO PERFIL DE ESTRÉS: ${profile}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:15.205543" elapsed="0.001132"/>
+</kw>
+<kw name="Setup Con Control de Red">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n&gt;&gt;&gt; [SETUP] Perfil Solicitado: ${profile_override}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:15.208671" elapsed="0.000000"/>
+</kw>
+<if>
+<branch type="IF" condition="'${profile_override}' != 'NONE'">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n&gt;&gt;&gt; [SETUP] Activando Control de Red: ${profile_override}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:15.209880" elapsed="0.001005"/>
+</kw>
+<kw name="Connect To Netstorm" owner="netstorm_controller">
+<arg>${NETSTORM_IP}</arg>
+<arg>${NETSTORM_VNC_PASS}</arg>
+<doc>Conecta al Netstorm via VNC</doc>
+<status status="PASS" start="2025-12-17T12:23:15.210885" elapsed="0.002469"/>
+</kw>
+<kw name="Set Network Profile" owner="netstorm_controller">
+<msg time="2025-12-17T12:23:23.607509" level="INFO">VNC: Cargando perfil  en Netstorm...
+VNC: Perfil cargado.</msg>
+<arg>${profile_override}</arg>
+<doc>Mapea nombres a números de perfil</doc>
+<status status="PASS" start="2025-12-17T12:23:15.213354" elapsed="8.394155"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Esperamos 3s a que el ruido se estabilice...</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-12-17T12:23:23.607509" elapsed="0.000000"/>
+</kw>
+<kw name="Sleep" owner="BuiltIn">
+<msg time="2025-12-17T12:23:26.621464" level="INFO">Slept 3 seconds.</msg>
+<arg>3s</arg>
+<doc>Pauses the test executed for the given time.</doc>
+<status status="PASS" start="2025-12-17T12:23:23.607509" elapsed="3.015729"/>
+</kw>
+<status status="PASS" start="2025-12-17T12:23:15.209880" elapsed="11.413358"/>
+</branch>
+<status status="PASS" start="2025-12-17T12:23:15.208671" elapsed="11.414567"/>
+</if>
+<arg>profile_override=${profile}</arg>
+<doc>Si se pide perfil de red, conecta al Netstorm y aplica el perfil. Si NETWORK_PROFILE es NONE, no hace nada (comportamiento clásico).</doc>
+<status status="PASS" start="2025-12-17T12:23:15.207673" elapsed="11.415565"/>
+</kw>
+<kw name="Get Current Trap Count" owner="MyKeywords">
+<msg time="2025-12-17T12:23:26.623238" level="FAIL">ERROR CRÍTICO: 'ACTIVE_APP_REF' no está asignado.</msg>
+<var>${start_index_A}</var>
+<arg>A</arg>
+<doc>Llama al metodo dentro de TrapListenerController, pasándole antes la referencia de la aplicacion principal (esta es la que SÍ tiene acceso a Trap_Listener_Controller)'.
+Esto lo hacemos porque Robot Framework no puede importar directamente clases de la lógica de la aplicación principal.</doc>
+<status status="FAIL" start="2025-12-17T12:23:26.623238" elapsed="0.019706">ERROR CRÍTICO: 'ACTIVE_APP_REF' no está asignado.</status>
+</kw>
+<kw name="Get Current Trap Count" owner="MyKeywords">
+<var>${start_index_B}</var>
+<arg>B</arg>
+<doc>Llama al metodo dentro de TrapListenerController, pasándole antes la referencia de la aplicacion principal (esta es la que SÍ tiene acceso a Trap_Listener_Controller)'.
+Esto lo hacemos porque Robot Framework no puede importar directamente clases de la lógica de la aplicación principal.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.642944" elapsed="0.000000"/>
+</kw>
+<kw name="Hil Start Performance Log" owner="MyKeywords">
+<arg>${RASPBERRY_PI_IP}</arg>
+<arg>${CHANNELS_TO_TEST}</arg>
+<doc>Configura y comienza el logging de tiempos en la Raspberry Pi HIL.
+channel: Puede ser un string de canales separados por una coma -&gt; 1,2,3..
+En modo TEMPORAL, solo pide T5.
+En modo FINAL, pide ALL (T0 y T5).</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.642944" elapsed="0.000000"/>
+</kw>
+<kw name="Evaluate" owner="BuiltIn">
+<var>${total_duration_s}</var>
+<arg>(int(${NUM_PULSES}) * float(${PULSE_DURATION})) + ((int(${NUM_PULSES}) - 1) * float(${LOOP_DELAY})) + 10</arg>
+<doc>Evaluates the given expression in Python and returns the result.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.642944" elapsed="0.000000"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>El comando tarda</arg>
+<arg>${total_duration_s} segundos aprox.</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.642944" elapsed="0.000000"/>
+</kw>
+<kw name="Send Hil Command" owner="MyKeywords">
+<var>${response}</var>
+<arg>${RASPBERRY_PI_IP}</arg>
+<arg>BURST_BATCH,${NUM_PULSES},${PULSE_DURATION},${LOOP_DELAY},${CHANNELS_TO_TEST}</arg>
+<arg>${HIL_PORT}</arg>
+<arg>${total_duration_s}</arg>
+<doc>Se conecta al servidor HIL de la Raspberry Pi o a la Arduino por puerto Serie y envía un comando.
+Devuelve la respuesta del servidor.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.642944" elapsed="0.000000"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n\n *** RÁFAGA COMPLETADA. RESPUESTA RPI: ${response} ***</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.642944" elapsed="0.011593"/>
+</kw>
+<kw name="Sleep" owner="BuiltIn">
+<arg>6s</arg>
+<doc>Pauses the test executed for the given time.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.655044" elapsed="0.000330"/>
+</kw>
+<kw name="Hil Stop Performance Log" owner="MyKeywords">
+<var>${rpi_logs}</var>
+<arg>${RASPBERRY_PI_IP}</arg>
+<arg>${HIL_PORT}</arg>
+<doc>Detiene el logging de tiempos en la RPI, descarga los logs JSON y los devuelve como diccionario de pyth para que robot lo use más tarde.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.655374" elapsed="0.000000"/>
+</kw>
+<kw name="Sleep" owner="BuiltIn">
+<arg>2s</arg>
+<doc>Pauses the test executed for the given time.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.655374" elapsed="0.000000"/>
+</kw>
+<kw name="Get Traps Since Index" owner="MyKeywords">
+<var>${all_new_traps_A}</var>
+<arg>A</arg>
+<arg>${start_index_A}</arg>
+<doc>Llama al metodo dentro de TrapListenerController, pasándole antes la referencia de la aplicacion principal (esta es la que SÍ tiene acceso a Trap_Listener_Controller)'.
+Esto lo hacemos porque Robot Framework no puede importar directamente clases de la lógica de la aplicación principal.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.655374" elapsed="0.000000"/>
+</kw>
+<kw name="Get Traps Since Index" owner="MyKeywords">
+<var>${all_new_traps_B}</var>
+<arg>B</arg>
+<arg>${start_index_B}</arg>
+<doc>Llama al metodo dentro de TrapListenerController, pasándole antes la referencia de la aplicacion principal (esta es la que SÍ tiene acceso a Trap_Listener_Controller)'.
+Esto lo hacemos porque Robot Framework no puede importar directamente clases de la lógica de la aplicación principal.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.655374" elapsed="0.000000"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>WP3: Generando informe Escenario B</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.655374" elapsed="0.000000"/>
+</kw>
+<kw name="Generate Functional Report" owner="MyKeywords">
+<var>${func_csv_path}</var>
+<var>${tasa_exito}</var>
+<arg>${rpi_logs}</arg>
+<arg>${all_new_traps_A}</arg>
+<arg>${all_new_traps_B}</arg>
+<arg>1000</arg>
+<doc>Genera un informe FUNCIONAL.
+Se centra en la calidad de la señal (Latencia Total) y la Integridad de los datos.
+Args:
+    max_latency_threshold_ms: Límite en ms. Si Latencia &gt; limite -&gt; FAIL.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.660617" elapsed="0.002012"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n *** REPORTE FUNCIONAL CREADO: ${func_csv_path} ***</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.664635" elapsed="0.000000"/>
+</kw>
+<kw name="Set Variable If" owner="BuiltIn">
+<var>${status}</var>
+<arg>${tasa_exito} == 100</arg>
+<arg>PASS</arg>
+<arg>FAIL</arg>
+<doc>Sets variable based on the given condition.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.666641" elapsed="0.000000"/>
+</kw>
+<kw name="Append To File" owner="OperatingSystem">
+<arg>${summary_file}</arg>
+<arg>${profile},${tasa_exito},${status}\n</arg>
+<doc>Appends the given content to the specified file.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.666641" elapsed="0.002008"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Resultado: ${tasa_exito}%</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.668649" elapsed="0.004508"/>
+</kw>
+<kw name="Run Keyword If" owner="BuiltIn">
+<arg>${tasa_exito} &lt; 100</arg>
+<arg>Exit For Loop</arg>
+<doc>Runs the given keyword with the given arguments, if ``condition`` is true.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.673157" elapsed="0.000996"/>
+</kw>
+<var name="${profile}">LOSS_10</var>
+<status status="FAIL" start="2025-12-17T12:23:04.398089" elapsed="22.276064">ERROR CRÍTICO: 'ACTIVE_APP_REF' no está asignado.</status>
+</iter>
+<var>${profile}</var>
+<value>@{LOSS_PROFILES}</value>
+<status status="FAIL" start="2025-12-17T12:23:04.396083" elapsed="22.279068">ERROR CRÍTICO: 'ACTIVE_APP_REF' no está asignado.</status>
+</for>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>\n*** ANALISIS COMPLETADO ***</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.695800" elapsed="0.000000"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Resumen guardado en: ${summary_file}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="NOT RUN" start="2025-12-17T12:23:26.701558" elapsed="0.001300"/>
+</kw>
+<kw name="Teardown Con Cierre de VNC" type="TEARDOWN">
+<kw name="Run Keyword If" owner="BuiltIn">
+<arg>'${NETWORK_PROFILE}' != 'NONE'</arg>
+<arg>Set Network Profile</arg>
+<arg>CLEAN</arg>
+<doc>Runs the given keyword with the given arguments, if ``condition`` is true.</doc>
+<status status="PASS" start="2025-12-17T12:23:26.709617" elapsed="0.001993"/>
+</kw>
+<kw name="Run Keyword If" owner="BuiltIn">
+<arg>'${NETWORK_PROFILE}' != 'NONE'</arg>
+<arg>Disconnect From Netstorm</arg>
+<doc>Runs the given keyword with the given arguments, if ``condition`` is true.</doc>
+<status status="PASS" start="2025-12-17T12:23:26.714603" elapsed="0.000997"/>
+</kw>
+<doc>Cierra la conexión VNC al terminar, si se abrió.</doc>
+<status status="PASS" start="2025-12-17T12:23:26.707621" elapsed="0.008976"/>
+</kw>
+<doc>Itera incrementando la pérdida de paquetes para encontrar el límite del equipo. El test se detiene cuando la Disponibilidad baja del 100%.</doc>
+<status status="FAIL" start="2025-12-17T12:23:04.318027" elapsed="22.400563">ERROR CRÍTICO: 'ACTIVE_APP_REF' no está asignado.</status>
 </test>
-<doc>Tests para controlar el equipo Netstorm, de Albedo.</doc>
-<status status="PASS" start="2025-12-10T15:31:17.121991" elapsed="2.198444"/>
+<doc>Tests para controlar el Hardware-in-the-Loop (Raspberry Pi).</doc>
+<status status="FAIL" start="2025-12-17T12:23:02.514637" elapsed="24.209315"/>
 </suite>
 <statistics>
 <total>
-<stat pass="1" fail="0" skip="0">All Tests</stat>
+<stat pass="0" fail="1" skip="0">All Tests</stat>
 </total>
 <tag>
 </tag>
 <suite>
-<stat name="HIL Netstorm Control" id="s1" pass="1" fail="0" skip="0">HIL Netstorm Control</stat>
+<stat name="HIL Tests" id="s1" pass="0" fail="1" skip="0">HIL Tests</stat>
 </suite>
 </statistics>
 <errors>

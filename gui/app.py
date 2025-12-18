@@ -197,10 +197,13 @@ class ModernTestRunnerApp(ctk.CTk):
             "Ejecutar Rafaga GUI": ["CHANNELS_STR: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
             "Escenario 4: Prueba de Sensibilidad PWM" : ["CHANNELS_TO_TEST: START: END: NETWORK_PROFILE:NOISE"],
             "Ejecutar Rafaga De Rendimiento Funcional": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
+            "Ejecutar Pruebas de Rendimiento Dev&Functional" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
+            "WP3 Escenario B Loss_Brakepoint" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
+            "WP3 Escenario C Tormenta_Red" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
             
             # --- Tests Inyeccion Ruido Netstorm---
-            # "Escenario WP3: Activar Perfil NOISE en Netstorm": ["NETSTORM_IP: NETSTORM_VNC_PASS:"],
-            # "Escenario WP3: Activar Perfil CLEAN en Netstorm": ["NETSTORM_IP: NETSTORM_VNC_PASS:"],
+            "Configurar Perfil Personalizado (Universal)": ["PROFILE_NAME: NOISE_PORT: LOSS_MODE: LOSS_PROBABILITY: BURST_LENGTH: BURST_SEPARATION: ALTERNATIVE_LOSS_PROB: MEAN_LENGTH: MEAN_ALTERNATIVE_LENGTH: DELAY_MODE: FIXED_DELAY: MIN_DELAY: MAX_DELAY: AVG_DELAY: REORDENING: BANDWIDTH_MODE: BANDWIDTH_MODE: FRAME_RATE: MAX_BURST_SIZE_FR: DUPLICATION_MODE: DUPLICATION_PROBABILITY: ERROR_MODE: ERROR_PROBABILITY:"],
+                 
             
             # --- Tests de Registro Cronológico ---
             "Retrieve Chronological Register": [],

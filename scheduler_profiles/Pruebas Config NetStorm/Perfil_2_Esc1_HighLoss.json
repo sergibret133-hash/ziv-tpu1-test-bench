@@ -1,0 +1,20 @@
+[
+    {
+        "type": "Ejecutar Test",
+        "name": "Escenario WP3: Activar Perfil CLEAN en Netstorm (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "",
+        "param": ""
+    },
+    {
+        "type": "Ejecutar Test",
+        "name": "Configurar Perfil Personalizado (Universal) (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Netstorm_Control.robot",
+        "vars": "PROFILE_NAME:04_WP3_Loss_High.cfg LOSS_MODE:random LOSS_PROBABILITY:40 DELAY_MODE:None DUPLICATION_MODE:None",
+        "param": ""
+    }
+]

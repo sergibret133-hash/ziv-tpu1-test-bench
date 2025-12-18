@@ -4,6 +4,7 @@ Library   netstorm_controller.py
 Library   Collections
 Library    netstorm_controller.py
 Library    OperatingSystem
+Library    DateTime
 
 Documentation    Tests para controlar el Hardware-in-the-Loop (Raspberry Pi).
 
@@ -36,7 +37,7 @@ ${NETSTORM_VNC_PASS}    Passwd@02
 
 ${NETWORK_PROFILE}      NONE    # Variable de control (por defecto NONE modo normal sin ruido) PARA LOS REPORTS DE RAFAGAS "FUNCTIONAL" Y "DEV"
 ${PROFILE_STORM}        WP3_Storm_Duplicates.cfg
-@{LOSS_PROFILES}    WP3_Loss_10.cfg    WP3_Loss_20.cfg    WP3_Loss_30.cfg    WP3_Loss_40.cfg
+@{LOSS_PROFILES}    LOSS_10    LOSS_20    LOSS_40    LOSS_60    LOSS_80
 
 *** Test Cases ***
 # *************************** HIL INTRO TESTS ***************************
@@ -81,8 +82,6 @@ Ejecutar Rafaga GUI
 
 Send Input Command
     ${variable}=    Send Hardware Input Command    ${COMMAND_STR}
-
-
 
 
 # *************************************************************************************************************************************************
@@ -283,12 +282,14 @@ Escenario 4: Prueba de Sensibilidad PWM
 # ESCENARIO B
 WP3 Escenario B Loss_Brakepoint
     [Documentation]    Itera incrementando la pérdida de paquetes para encontrar el límite del equipo. El test se detiene cuando la Disponibilidad baja del 100%.
-    [Setup]       Setup Con Control de Red    # Al no pasarle ningun argumento no hará nada. Escogeremos el perfil y nos conectaremos nosotros manualmente
+    [Setup]       Setup Con Control de Red
     [Teardown]    Teardown Con Cierre de VNC
     Log To Console    *** INICIANDO BÚSQUEDA DEL PUNTO DE RUPTURA *** 
     
     # ** PREPARAMOS CARPETA Y ARCHIVO SUMMARY
-    ${timestamp}=    Get Time    format=%Y%m%d_%H%M%S
+    # ${timestamp}=    Get Time    format=%Y%m%d_%H%M%S
+    ${timestamp}=    Get Current Date    result_format=%Y%m%d_%H%M%S
+
     ${test_folder}=  Set Variable    test_results${/}breakpoint_${timestamp}
     Create Directory    ${test_folder}
     
@@ -300,11 +301,12 @@ WP3 Escenario B Loss_Brakepoint
     FOR    ${profile}    IN    @{LOSS_PROFILES}
         Log To Console    \n PROBANDO PERFIL: ${profile}
         
-        # Nos conectamos a Net.Storm
-        Connect To Netstorm    ${NETSTORM_IP}    ${NETSTORM_VNC_PASS}
-        # Cargamos el perfil de red que estemos iterando
-        Set Network Profile    ${profile}
+        # CARGAMOS EL PERFIL
+        Log To Console    CARGANDO PERFIL DE ESTRÉS: ${profile}
+        Setup Con Control de Red    ${profile}
 
+        Log To Console    Esperando 4s para que el ruido se estabilice..
+        Sleep    4s
         # ***************************************************************************+
         
         ${start_index_A}=    Get Current Trap Count    A
@@ -322,9 +324,9 @@ WP3 Escenario B Loss_Brakepoint
         ${response}=    Send Hil Command    ${RASPBERRY_PI_IP}    BURST_BATCH,${NUM_PULSES},${PULSE_DURATION},${LOOP_DELAY},${CHANNELS_TO_TEST}    ${HIL_PORT}    ${total_duration_s}
         # ${response}=    Send Hil Command    ${RASPBERRY_PI_IP}    BURST_BATCH,${NUM_PULSES},${PULSE_DURATION},${LOOP_DELAY},${CHANNELS_TO_TEST}    ${HIL_PORT}    30
         Log To Console   \n\n *** RÁFAGA COMPLETADA. RESPUESTA RPI: ${response} ***
-        Log To Console    Esperando a que se silencien los traps SNMP...
-        Wait For Traps Silence    B    silence_window=3
-
+        # Log To Console    Esperando a que se silencien los traps SNMP...
+        # Wait For Traps Silence    B    silence_window=3
+        Sleep    6s
     # *************** RECOLECCION DE DATOS ********************************
         # Obtenemos los logs de T0 y T5 de la RPI
         ${rpi_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
@@ -358,7 +360,7 @@ WP3 Escenario C Tormenta_Red
     [Documentation]    Verifica la inmunidad del TPU-1 ante duplicación de paquetes (10%).El test falla si Count(T5) != Count(T0).
     [Setup]       Setup Con Control de Red    STORM
     [Teardown]    Teardown Con Cierre de VNC
-
+    Sleep    4s    # Para que se estabilice el ruido
     Log To Console    \n *** INICIANDO TEST DE TORMENTA ***
 # ************************* INICIAMOS LOGGER RPI PARA PINES T0 Y T5 *************************************
     Hil Start Performance Log    ${RASPBERRY_PI_IP}    ${CHANNELS_TO_TEST}
@@ -399,17 +401,26 @@ Setup Con Control de Red
     [Documentation]    Si se pide perfil de red, conecta al Netstorm y aplica el perfil. Si NETWORK_PROFILE es NONE, no hace nada (comportamiento clásico).
     [Arguments]    ${profile_override}=${NETWORK_PROFILE}    # Si no le pasamos Argumento, automaticamente cojerá el perfil ->
                                                             # -> ${NETWORK_PROFILE} -> Que es el que usamos como variable en la generación de Informes Tradicional con el perfil de Ruido 01_NOISE
-    
+    # Detectamos si se va a cargar un perfil diferente de CLEAN para limpiar la sesion antes
+    IF    '${profile_override}' != 'CLEAN'
+        Connect To Netstorm    ${NETSTORM_IP}    ${NETSTORM_VNC_PASS}
+        Set Network Profile    CLEAN
+        Disconnect From Netstorm
+        Sleep    2s
+    END
+
     Log To Console    \n>>> [SETUP] Perfil Solicitado: ${profile_override}
-    Run Keyword If    '${profile_override}' != 'NONE'    Log To Console    \n>>> [SETUP] Activando Control de Red: ${profile_override}
     
-    # Nos conectamos en caso de que nos lo pidan
-    Run Keyword If    '${profile_override}' != 'NONE'    Connect To Netstorm    ${NETSTORM_IP}    ${NETSTORM_VNC_PASS}
-    
-    # Cargamos el perfil (CLEAN o NOISE)
-    Run Keyword If    '${profile_override}' != 'NONE'    Set Network Profile    ${profile_override}
+    IF    '${profile_override}' != 'NONE'
+        Log To Console    \n>>> [SETUP] Activando Control de Red: ${profile_override}
+        Connect To Netstorm    ${NETSTORM_IP}    ${NETSTORM_VNC_PASS}
+        Set Network Profile    ${profile_override}
+    END
+    # Cerramos VNC inmediatamente para que la sesión no se nos desconecte automaticamente por ¿inactividad?
+    Disconnect From Netstorm
 
 Teardown Con Cierre de VNC
     [Documentation]    Cierra la conexión VNC al terminar, si se abrió.
-    Run Keyword If    '${NETWORK_PROFILE}' != 'NONE'    Set Network Profile    CLEAN
-    Run Keyword If    '${NETWORK_PROFILE}' != 'NONE'    Disconnect From Netstorm
+    Connect To Netstorm    ${NETSTORM_IP}    ${NETSTORM_VNC_PASS}
+    Set Network Profile    CLEAN
+    Disconnect From Netstorm

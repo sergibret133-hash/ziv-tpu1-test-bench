@@ -1,11 +1,11 @@
 [
     {
         "type": "Ejecutar Test",
-        "name": "Ejecutar Rafaga De Rendimiento Funcional (Sesi\u00f3n: A)",
+        "name": "Ejecutar Pruebas de Rendimiento Dev&Functional (Sesi\u00f3n: A)",
         "on_fail": "Detener secuencia",
         "session_id": "A",
         "file": "HIL_Tests.robot",
-        "vars": "CHANNELS_TO_TEST:1 NUM_PULSES:20 PULSE_DURATION:0.3 LOOP_DELAY:0.7 MAX_LATENCY_THRESHOLD:10 NETWORK_PROFILE:NOISE",
+        "vars": "CHANNELS_TO_TEST:1 NUM_PULSES:50 PULSE_DURATION:0.1 LOOP_DELAY:0.5 MAX_LATENCY_THRESHOLD:5 NETWORK_PROFILE:WP3_Loss_High",
         "param": ""
     },
     {

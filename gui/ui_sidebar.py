@@ -108,5 +108,5 @@ def create_sidebar(app_ref):
     except FileNotFoundError:
         print("Logo file ('logo.png') not found. Skipping logo display.")
 
-    app_ref.version_label = ctk.CTkLabel(app_ref.sidebar_frame, text="v3.0 - HIL", anchor="w")
+    app_ref.version_label = ctk.CTkLabel(app_ref.sidebar_frame, text="v4.0 - HIL + NOISE", anchor="w")
     app_ref.version_label.grid(row=13, column=0, padx=20, pady=(10, 20))
