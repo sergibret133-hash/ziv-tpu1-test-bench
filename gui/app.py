@@ -194,9 +194,11 @@ class ModernTestRunnerApp(ctk.CTk):
             "Send Input Command": ["RASPBERRY_PI_IP: COMMAND_STR:PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,... NETWORK_PROFILE:NOISE"],
             # "Ejecutar Rafaga De Rendimiento": ["NUM_PULSES: CHANNEL: PULSE_DURATION: LOOP_DELAY:"], # Antiguo, para un solo canal
             "Ejecutar Rafaga De Rendimiento": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
+            "Ejecutar Rafaga De Rendimiento Multicanal": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
             "Ejecutar Rafaga GUI": ["CHANNELS_STR: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
             "Escenario 4: Prueba de Sensibilidad PWM" : ["CHANNELS_TO_TEST: START: END: NETWORK_PROFILE:NOISE"],
             "Ejecutar Rafaga De Rendimiento Funcional": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
+            "Ejecutar Rafaga De Rendimiento Funcional Multicanal": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
             "Ejecutar Pruebas de Rendimiento Dev&Functional" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
             "WP3 Escenario B Loss_Brakepoint" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
             "WP3 Escenario C Tormenta_Red" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],

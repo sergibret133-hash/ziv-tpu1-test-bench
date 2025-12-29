@@ -550,7 +550,7 @@ def find_closest_next(target_time, candidate_list, time_window=2.0, skew_toleran
     return best_val, best_idx
 
 
-def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
+def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b, file_suffix=""):
     """
     Genera un informe correlacionando listas de traps con logs de RPi mediante Correlación Temporal. De esta forma, evitamos traps duplicados o que lleguen muy tarde.
     ¡IMPORTANTE! ¡LA RPI Y LA TPU TIENEN QUE ESTAR SINCRONIZADAS CONTRA EL MISMO RELOJ POR NTP!
@@ -621,7 +621,7 @@ def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b):
 
 
     # Generamos el informe CSV
-    filename = f"test_results/burst_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = f"test_results/burst_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}{file_suffix}.csv"
     os.makedirs("test_results", exist_ok=True)
     
 
@@ -883,7 +883,7 @@ def log_pwm_step_test_result(filename, pulse_width_ms, t0_count, t5_count, succe
         
         
 # REPORT PARA PRUEBAS FUNCIONALES
-def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_threshold_ms=15.0, output_subdir=None):
+def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_threshold_ms=15.0, output_subdir=None, file_suffix=""):
     """
     Genera un informe FUNCIONAL.
     Se centra en la calidad de la señal (Latencia Total) y la Integridad de los datos.
@@ -995,7 +995,7 @@ def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_t
         
     os.makedirs(save_dir, exist_ok=True)
     
-    filename = os.path.join(save_dir, f"functional_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+    filename = os.path.join(save_dir, f"functional_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}{file_suffix}.csv")
 
     
     with open(filename, 'w', newline='', encoding='utf-8') as f:
@@ -1125,3 +1125,93 @@ def generate_storm_report(rpi_logs):
 
     print(f"STORM REPORT generado: {filename}")
     return filename, status, count_t0, count_t5
+
+
+
+# *** MULTICANAL ***
+# Añadir a MyKeywords.py
+
+def generate_multichannel_burst_report(multi_logs, all_traps_a, all_traps_b):
+    """
+    Recibe los logs agrupados por canal y genera UN informe CSV por cada canal activo.
+    Args:
+        multi_logs: Recordemos que era un diccionario {'1': {'t0_ns': [], 't5_ns': []}, '2': ...}
+    """
+    generated_files = []
+    
+    # Iteramos por cada canal que nos ha devuelto la RPi
+    for channel_id, logs_data in multi_logs.items():
+        print(f"*** Procesando Canal {channel_id} ***")
+        
+        # logs_data ya tiene la forma {'t0_ns': [...], 't5_ns': [...]} que espera nuestra función original.
+        
+        # FILTRADO DE TRAPS (Opcional pero recomendado)
+        # Si tus traps SNMP tienen información del canal (ej. en el OID o valor),
+        # deberías filtrar aquí. Si no, pasamos todos y confiamos en la correlación temporal.
+        # Por ahora, pasamos todos:
+        chan_traps_a = all_traps_a 
+        chan_traps_b = all_traps_b 
+
+        # LLAMADA A TU LÓGICA ORIGINAL
+        # Reutilizamos tu función 'generate_burst_performance_report'
+        # PERO: Hay que modificarla ligeramente para que acepte un prefijo en el nombre del archivo
+        csv_path, t3_count, t4_count = generate_burst_performance_report(
+            logs_data, 
+            chan_traps_a, 
+            chan_traps_b, 
+            file_suffix=f"_CH{channel_id}"  # Para no sobrescribir archivos!!
+        )
+        
+        generated_files.append(csv_path)
+        print(f"Reporte CH{channel_id} generado: {csv_path}")
+
+    return f"Se han generado {len(generated_files)} informes: {', '.join(generated_files)}"
+
+
+# Añadir a MyKeywords.py
+
+def generate_multichannel_functional_report(multi_logs, all_traps_a, all_traps_b, max_latency_threshold_ms=15.0):
+    """
+    Genera reportes funcionales para múltiples canales y calcula un veredicto global.
+    """
+    global_results = {
+        "reports": [],
+        "channel_scores": {},
+        "min_success_rate": 100.0,
+        "global_status": "PASS"
+    }
+    
+    print(f"\n*** INICIANDO ANÁLISIS FUNCIONAL MULTICANAL ({len(multi_logs)} canales) ***")
+
+    # Iteramos sobre cada canal devuelto por la RPi (ej: '1', '2', '3')
+    for channel_id, logs_data in multi_logs.items():
+        print(f"Evaluando Canal {channel_id}...")
+        
+        # Generamos el reporte individual reutilizando tu lógica existente
+        # NOTA: Pasamos todos los traps. Tu algoritmo 'find_closest_next' usará los T0 
+        # específicos de este canal para encontrar sus correspondientes traps por tiempo.
+        report_path, success_rate = generate_functional_report(
+            logs_data,
+            all_traps_a,
+            all_traps_b,
+            max_latency_threshold_ms,
+            file_suffix=f"_CH{channel_id}"  # Identificador en el nombre del archivo
+        )
+        
+        # Guardamos métricas
+        global_results["reports"].append(report_path)
+        global_results["channel_scores"][channel_id] = success_rate
+        
+        # Actualizamos la tasa de éxito mínima
+        if success_rate < global_results["min_success_rate"]:
+            global_results["min_success_rate"] = success_rate
+
+    # Si el peor canal no tiene 100%, la prueba global no es perfecta
+    if global_results["min_success_rate"] < 100.0:
+        global_results["global_status"] = "FAIL/DEGRADED"
+
+    print(f"*** RESUMEN GLOBAL ***")
+    print(f"Resultado final: {global_results['global_status']}")
+    print(f"Peor Canal: {global_results['min_success_rate']}% éxito")
+    
+    return global_results["reports"], global_results["min_success_rate"]
