@@ -687,8 +687,12 @@ def generate_burst_performance_report(rpi_logs, all_traps_a, all_traps_b, file_s
                 ref_for_t4 = t3_val if t3_val else ref_for_t3
                 t4_val, t4_idx = find_closest_next(ref_for_t4, traps_by_type["T4"], WIN_PROC_OUT, skew_tolerance=0.002, used_set=used_indices["T4"])
                 
-            # Buscamos T5 (Físico RPi) 
+            # Buscamos T5 (Físico RPi)
+            # DEFINIMOS FILTRO ANTI-RUIDO: 3ms (0.003s)
+            MIN_PHYSICAL_DELAY_S = 0.003
+            
             if t0_val:
+                search_start_time = t0_val + MIN_PHYSICAL_DELAY_S
                 t5_val, t5_idx = find_closest_next(t0_val, t5_epochs, time_window=0.030, skew_tolerance=0, used_set=used_indices["T5"])
             # Si el find_closest_next anterior hubiera fallado partimos del trap anterior.
             elif t4_val:
@@ -944,6 +948,13 @@ def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_t
         if t4_val: integrity_counts["T4"] += 1
 
         # T5 (Output Físico)
+        
+        # FILTRO ANTI-RUIDO
+        # Definimos ventana de silencio de 3ms para ignorar el crosstalk inductivo
+        MIN_PHYSICAL_DELAY_S = 0.003
+        # Desplazamos el punto de inicio de la búsqueda
+        search_start_t5 = t0_val + MIN_PHYSICAL_DELAY_S
+        
         t5_val, _ = find_closest_next(t0_val, t5_epochs, 0.100, 0.0, used_indices["T5"])
         
         if t5_val:

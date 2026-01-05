@@ -118,7 +118,9 @@ Ejecutar Rafaga De Rendimiento
 
 # *************** RECOLECCION DE DATOS ********************************
     # Obtenemos los logs de T0 y T5 de la RPI
-    ${rpi_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
+    # ${rpi_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
+    ${multi_channel_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
+    ${rpi_logs}=    Get From Dictionary    ${multi_channel_logs}    1
     Sleep    2s
     # Obtenemos todos los traps recolectados
     ${all_new_traps_A}=    Get Traps Since Index    A    ${start_index_A}
@@ -217,7 +219,9 @@ Ejecutar Rafaga De Rendimiento Funcional
 
 # *************** RECOLECCION DE DATOS ********************************
     # Obtenemos los logs de T0 y T5 de la RPI
-    ${rpi_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
+    # ${rpi_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
+    ${multi_channel_logs}=    Hil Stop Performance Log    ${RASPBERRY_PI_IP}    ${HIL_PORT}
+    ${rpi_logs}=    Get From Dictionary    ${multi_channel_logs}    1
     Sleep    2s
     # Obtenemos todos los traps recolectados
     ${all_new_traps_A}=    Get Traps Since Index    A    ${start_index_A}

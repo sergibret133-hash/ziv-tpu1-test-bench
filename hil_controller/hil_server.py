@@ -41,8 +41,8 @@ import time
 import threading
 import json
 import os
-# import sounddevice as sd
-# import numpy as np
+import sounddevice as sd
+import numpy as np
 from collections import defaultdict
 from datetime import timedelta
 
@@ -55,8 +55,69 @@ except Exception as e:
     print(f"Detalle import error: {e}")
     sys.exit(1)
 
-from datetime import timedelta
 
+# ********************************************************************************************
+# GENERADOR DE RUIDO ANALÓGICO INYECTADO (DSP)
+# ********************************************************************************************
+class WhiteNoiseGenerator:
+    def __init__(self, sample_rate=44100):
+        self.sample_rate = sample_rate
+        self.stream = None
+        self.amplitude = 0.0  # Amplitud del ruido
+        self.is_running = False
+        self.lock = threading.Lock()
+        
+    def _audio_callback(self, outdata, frames, time_info, status):
+        """Genera ruido blanco y lo escribe en el buffer de salida."""
+        if status:
+            print(f"AUDIO_WARN {status}")
+
+        # Generación matematica de la distrubución normal de ruido blanco
+        noise = np.random.normal(0, 1, frames)
+        
+        # Aplicamos ganancia
+        with self.lock:
+            current_amplitude = self.amplitude
+        
+        noise = noise * current_amplitude
+        
+        # Aseguramos que los datos están en el rango -1.0, 1.0
+        noise = np.clip(noise, -1.0, 1.0)
+        
+        # Volcamos los datos al buffer de salida
+        outdata[:, 0] = noise.astype(np.float32)  # Canal mono!
+        
+    def start(self):
+        if not self.is_running:
+            try:
+                self.stream = sd.OutputStream(
+                    channels=1,
+                    samplerate=self.fs,
+                    callback=self._audio_callback
+                )
+                self.stream.start()
+                self.is_running = True
+                print("DSP Generador de ruido blanco iniciado.")
+            except Exception as e:
+                print(f"ERROR al iniciar el generador de ruido blanco: {e}")
+    
+    def stop(self):
+        if self.is_running:
+            self.stream.stop()
+            self.stream.close()
+            self.is_running = False
+            print("DSP Generador de ruido blanco detenido.")
+    
+    def set_amplitude(self, amplitude):
+        level = max(0.0 , min(float(amplitude), 1.0))
+        with self.lock:
+            self.amplitude = level
+        print(f"DSP Amplitud de ruido blanco ajustada a: {level}")
+        
+noise_generator = WhiteNoiseGenerator()
+                
+        
+        
 # *** INICIALIZACION ***
 #  *** Variables globales ***
 # t0_logs = []  # Lista para almacenar los logs de T0
@@ -159,15 +220,7 @@ def _alert_poll_loop(channel_id, request_obj, is_t5):
     Hilo dedicado a sondear un pin especifico.
     """
     global logging_active
-    # Tratamos de obtener el pin para el log
-    # try:
-    #     # Obtenemos el pin BCM desde el objeto request
-    #     pin_bcm = request_obj.offsets[0]
-    #     print(f"Evento Hilo del canal {channel_id} y pin GPIO{pin_bcm} Iniciado. Esperando logging_active para seguir")
-    # except Exception:
-    #     pin_bcm = "N/A"
-    #     print(f"Evento Hilo del canal {channel_id} Iniciado pero sin haber recuperado pin_bcm del objeto request. Esperando logging_active para seguir")
-
+    
     while not logging_active:
         time.sleep(0.01)
 
@@ -341,29 +394,23 @@ def command_get_logs():
     
     return "JSON," + json.dumps(response_data)
 
-
-
-
 # *** FUNCIONES DE BURST Y DIPARO ***
 def set_pin_state(pin_id, state):
     if pin_id in RELAY_REQUESTS:
         val = RELAY_ON_STATE if state else RELAY_OFF_STATE
         RELAY_REQUESTS[pin_id].set_value(PIN_MAP[pin_id], val)
         pin_states[pin_id] = state
+        return "ACK"
+    else:
+        return "ERROR,Pin ID no válido."
 
 # FUNCIONES DE PULSO
 def pulse_pin(pin_id, duration):
     """Genera un pulso en un pin GPIO específico durante una duración dada."""
     if pin_id in PIN_MAP:
-        response_on = set_pin_state(pin_id, 1)  # Activamos el pin y comprobamos respuesta
-        if response_on != "ACK":
-            return response_on      # Si falla la activación de la salida, devolvemos el codigo de error que nos retorna set_pin_state
-        
+        if set_pin_state(pin_id, 1) != "ACK": return "ERROR_ON"
         time.sleep(duration)         
-
-        response_off = set_pin_state(pin_id, 0)  # Desactivamos el pin y comprobamos respuesta
-        if response_off != "ACK":
-            return response_off     # Si falla la activación de la salida, devolvemos el codigo de error que nos retorna set_pin_state
+        if set_pin_state(pin_id, 0) != "ACK": return "ERROR_OFF"
         return "ACK"
     else:
         return "ERROR,Pin ID no válido."
@@ -402,117 +449,46 @@ def parse_and_execute(command):
     try:
         if command == 'PING':
             response = "PONG"
-
+            
+        # ******************************************************************
+        # COMANDOS DE RUIDO ANALOGICCO DSP
+        elif command.startswith("NOISE_START,"):
+            try:
+                parts = command.split(',')
+                level = float(parts[1])
+                noise_generator.set_amplitude(level)
+                noise_generator.start()
+                return f"ACK, Ruido blanco iniciado al nivel {level}"
+            except Exception as e:
+                return f"ERROR, No se pudo iniciar el ruido blanco: {e}"
+            
+        elif command == "NOISE_STOP":
+            noise_generator.stop()
+            return "ACK, Ruido blanco detenido"
+    
+        # ******************************************************************
         elif command.startswith("CONFIG_LOG,"):
             time.sleep(0.1)
-            
             parts = command.split(',')
-            if parts[1] in ["T0", "T5", "ALL"]:
-                log_mode = parts[1]
-                channel_ids = parts[2:]
-                
-            return command_config_log(",".join(channel_ids), log_mode)
             
-            # try:
-            #     _release_log_pins()
-                
-            #     time.sleep(0.1)
-                
-            #     parts = command.split(',')
-                
-            #     # DETERMINAMOS EL MODO en el que funcionará nuestro sistema y los canales de log
-            #     log_mode = "ALL"
-            #     if parts[1] in ["T0", "T5", "ALL"]:
-            #         log_mode = parts[1]
-            #         channel_ids = parts[2:]
-            #         print(f"Modo log detectado a: {log_mode}")
-            #     else:
-            #         channel_ids = parts[1:]     # Si no nos pasaran el tipo de modo de log, asumimos que nos pasan los canales directamente para hacer un log completo (es por eso que hemos declarado log_mode = "ALL")
-                
-            #     current_log_mode = log_mode
-                
-            #     # print(f"abans clear") 
-            #     # current_log_channels.clear()
-            #     # print(f"abans for")
-                
-                
-            #     # Config de T0: Rising -Edge, PULL-DOWN
-            #     settings_t0 = gpiod.LineSettings(
-            #     direction=Direction.INPUT,
-            #     edge_detection=Edge.FALLING,
-            #     bias=Bias.PULL_UP
-            #     )
-                
-                
-            #     # Config de T5: FALLING-Edge, PULL-UP
-            #     settings_t5 = gpiod.LineSettings(   
-            #     direction=Direction.INPUT,
-            #     edge_detection=Edge.FALLING,
-            #     bias=Bias.PULL_UP
-            #     )
-                
-            #     current_log_channels.clear()
-                
-            #     # Reclamamos los elementos gpiod en función del modo que hayamos escogido funcionar nuestro sistema (current_log_mode: ALL, T0 o T5):
-            #     for channel_id in channel_ids:
-            #         channel_id = channel_id.strip()
-            #         if channel_id not in T0_PIN_MAP or channel_id not in T5_PIN_MAP:
-            #             return f"ERROR, Canal '{channel_id}' no valido"
-                
-            #         # Reclamamos los pines para alertas de flanco de '0' a '1' condicionalmente en funcion del tipo de log pasado
-            #         if current_log_mode == "ALL" or current_log_mode == "T0":
-            #             pin_bcm = T0_PIN_MAP[channel_id]
-            #             req = CHIP.request_lines(
-            #                 consumer=f"HIL_T0_{channel_id}",
-            #                 config={pin_bcm: settings_t0}
-            #             )                        
-            #             T0_REQUESTS[channel_id] = req   # Guardamos el request del canal que estammos iterando en la lista de request de T0
-            #             print(f"Canal {channel_id}: T0 (GPIO {pin_bcm}) reclamado.")
-                        
-            #         if current_log_mode == "ALL" or current_log_mode == "T5":
-            #             pin_bcm = T5_PIN_MAP[channel_id]
-            #             req = CHIP.request_lines(
-            #                 consumer=f"HIL_T5_{channel_id}",
-            #                 config={pin_bcm: settings_t5}
-            #             )                        
-            #             T5_REQUESTS[channel_id] = req   # Guardamos el request del canal que estammos iterando en la lista de request de T5
-            #             print(f"Canal {channel_id}: T5 (GPIO {pin_bcm}) reclamado.")
-                        
-            #         current_log_channels.append(channel_id)     # current_log_channel nos servirá para saber en el momento que queramos iniciar el log, SI ANTES HA SIDO CONFIGURADO CON CONFIG_LOG!
-  
-            #     return f"ACK, Canales '{','.join(current_log_channels)}' configurados para modo de logging {current_log_mode}"
+            if len(parts) < 2:
+                if parts[1] in ["T0", "T5", "ALL"]:
+                    log_mode = parts[1]
+                    channel_ids = parts[2:]
+                else:   # Si nos pasan directamente los canales, asumimos ALL
+                    log_mode = "ALL"
+                    channel_ids = parts[1:]
+
+                return command_config_log(",".join(channel_ids), log_mode)
+            else:
+                return "ERROR, Comando CONFIG_LOG inválido. Formato correcto: CONFIG_LOG,<ch_id>,<ch_id>.. o CONFIG_LOG,<mode>,<ch_id>,<ch_id>.."
             
-            # except Exception as e:
-            #     print(f"Error en CONFIG_LOG: {e}")
-            #     return f"ERROR, No se pudo configurar el canal para logging: {e}"
+
             
         elif command == "START_LOG":    
             # Iniciamos registro de logs
             return command_start_log()
         
-            # if not current_log_channels:
-            #     return "ERROR, No se han configurado canales. HAY QUE HACERLO ANTES CON EL COMANDO 'CONFIG_LOG,<ch_id>,<ch_id>..' !"
-            
-            # t0_logs.clear()     # Limpiamos logs anteriores
-            # t5_logs.clear()    # Limpiamos logs anteriores
-            # # t0_monitor_threads.clear()
-            # # t5_monitor_threads.clear()  
-            
-            # logging_active = True   # Activamso el flag conforme el log se ha iniciado
-            
-            # # Iniciamos los hilos de T0 (si no hay, no iteraremos ninguno)
-            # for channel_id, req_obj in T0_REQUESTS.items():
-            #     thread = threading.Thread(target=_alert_poll_loop, args=(channel_id, req_obj, t0_callback_handler), daemon=True)
-            #     t0_monitor_threads.append(thread)
-            #     thread.start()
-            
-            # # Iniciamos los hilos de T5 (si no hay, no iteraremos ninguno)
-            # for channel_id, req_obj in T5_REQUESTS.items():
-            #     thread = threading.Thread(target=_alert_poll_loop, args=(channel_id, req_obj, t5_callback_handler), daemon=True)
-            #     t5_monitor_threads.append(thread)
-            #     thread.start()                
-                                
-            # return f"ACK, Logging iniciado para {len(current_log_channels)} canales"
         
         elif command == "STOP_LOG":
             if not logging_active:
@@ -522,15 +498,6 @@ def parse_and_execute(command):
             
         elif command == "GET_LOGS":
             return command_get_logs()
-            # print(f"DEBUG: Preparando logs... T0: {len(t0_logs)} eventos, T5: {len(t5_logs)} eventos.")
-            # # Devolvemos los logs en formato JSON
-            # logs_data = {
-            #     "channels": ",".join(current_log_channels),
-            #     "t0_ns": t0_logs,
-            #     "t5_ns": t5_logs
-            # }
-            # # Para que el host interprete que le ha llegado los logs, los enviamos con prefijo JSON,
-            # return "JSON," + json.dumps(logs_data)
             
         elif command.startswith("ON,"):
             parts = command.split(',')
@@ -646,6 +613,7 @@ def parse_and_execute(command):
                     
                 else:
                     # Describimos la nueva confiuración del pin que vamos a reclamar
+                    # hacemos lectura puntual
                     settings_read = gpiod.LineSettings(
                     direction=Direction.INPUT,
                     bias=Bias.PULL_UP
