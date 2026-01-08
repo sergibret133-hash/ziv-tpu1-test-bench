@@ -229,14 +229,14 @@ def _alert_poll_loop(channel_id, request_obj, is_t5):
     try:
         while logging_active:
             # Esperamos un evento con timeout de 100ms
-            if request_obj.wait_edge_events(timeout=timedelta(milliseconds=50)):
+            if request_obj.wait_edge_events(timeout=timedelta(milliseconds=50)):# Timeout pequeño para leer
                 # Leemos los eventos
-                events = request_obj.read_edge_events() # Timeout pequeño para leer
+                events = request_obj.read_edge_events() 
                 for event in events:
                     # Pasamos el timestamp (en ns) y el pin_id al callback
                     # callback(channel_id, event.timestamp_ns)    # event.timestamp_ns: no ponemos () al final porque no es un metodo!
-                    append_log(channel_id, event.timestamp_ns, is_t5)   # Utilizamos la nueva función a la que podemos pasar el canal del que queremos hacer log
-    
+                    append_log(channel_id, time.time_ns(), is_t5)   # Utilizamos la nueva función a la que podemos pasar el canal del que queremos hacer log
+
     except Exception as e:
         if logging_active:
             print(f"ERROR en hilo canal {channel_id}: {e}")
@@ -325,6 +325,9 @@ def command_config_log(channels_str, mode="ALL"):
     """Configura los listeners para una lista de canales."""
     _release_log_pins()
     
+    t0_logs.clear()
+    t5_logs.clear()
+    
     channels = channels_str.split(',')
     
     settings_in = gpiod.LineSettings(direction=Direction.INPUT, edge_detection=Edge.FALLING, bias=Bias.PULL_UP)
@@ -332,6 +335,12 @@ def command_config_log(channels_str, mode="ALL"):
     try:
         for ch in channels:
             ch = ch.strip()
+            
+            # Inicializamos las variables de los logs para que aparezcan listas vacías en el json final
+            t0_logs[ch] = []
+            t5_logs[ch] = []
+
+
             # Configuramos T0
             if mode in ["ALL", "T0"] and ch in T0_PIN_MAP:
                 pin = T0_PIN_MAP[ch]
@@ -352,10 +361,7 @@ def command_config_log(channels_str, mode="ALL"):
 
 def command_start_log():
     global logging_active
-    # Limpiamos los diccionarios anteriores
-    t0_logs.clear()
-    t5_logs.clear()
-    
+
     logging_active = True
     
     # Lanzamos hilos de T0
@@ -468,22 +474,25 @@ def parse_and_execute(command):
     
         # ******************************************************************
         elif command.startswith("CONFIG_LOG,"):
-            time.sleep(0.1)
-            parts = command.split(',')
-            
-            if len(parts) < 2:
-                if parts[1] in ["T0", "T5", "ALL"]:
-                    log_mode = parts[1]
-                    channel_ids = parts[2:]
-                else:   # Si nos pasan directamente los canales, asumimos ALL
-                    log_mode = "ALL"
-                    channel_ids = parts[1:]
+            try:
+                time.sleep(0.1)
+                parts = command.split(',')
+                
+                if len(parts) > 2:
+                    if parts[1] in ["T0", "T5", "ALL"]:
+                        log_mode = parts[1]
+                        channel_ids = parts[2:]
+                    else:   # Si nos pasan directamente los canales, asumimos ALL
+                        log_mode = "ALL"
+                        channel_ids = parts[1:]
 
-                return command_config_log(",".join(channel_ids), log_mode)
-            else:
-                return "ERROR, Comando CONFIG_LOG inválido. Formato correcto: CONFIG_LOG,<ch_id>,<ch_id>.. o CONFIG_LOG,<mode>,<ch_id>,<ch_id>.."
-            
-
+                    return command_config_log(",".join(channel_ids), log_mode)
+                else:
+                    return "ERROR, Comando CONFIG_LOG inválido. Formato correcto: CONFIG_LOG,<ch_id>,<ch_id>.. o CONFIG_LOG,<mode>,<ch_id>,<ch_id>.."
+                
+            except Exception as e:
+                print(f"Error en CONFIG_LOG: {e}")
+                return f"ERROR, No se pudo configurar el canal para logging: {e}"
             
         elif command == "START_LOG":    
             # Iniciamos registro de logs

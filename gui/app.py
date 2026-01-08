@@ -68,7 +68,7 @@ from logic.alarms_controller import AlarmsController
 
 
 
-# --- CONFIGURATION ---
+# *** CONFIGURATION ***
 TEST_DIRECTORY = "tests"
 
 class ModernTestRunnerApp(ctk.CTk):
@@ -144,7 +144,7 @@ class ModernTestRunnerApp(ctk.CTk):
         
         # MAPAS DE DATOS Y CONFIGURACIONES
         self.test_variable_map = {
-            # --- Tests de Configuración Básica ---
+            # *** Tests de Configuración Básica ***
             "List Detected Modules": [],
             "List assigned Modules and Commands assigned": [],
             "Assign Prioritized Detected Modules": ["TP1", "TP2"],
@@ -156,7 +156,7 @@ class ModernTestRunnerApp(ctk.CTk):
             ],
             "Open_BasicConfiguration+Configure Display Time Zone": ["Time_zone"],
 
-            # --- Tests de Asignación de Comandos ---
+            # *** Tests de Asignación de Comandos ***
             "Log and Save Teleprotection Commands and Inputs/Outputs": [],
             "Program Command Assignments": [
                 "tx_matrix_str", 
@@ -165,7 +165,7 @@ class ModernTestRunnerApp(ctk.CTk):
                 "rx_list_str"
             ],
 
-            # --- Tests de SNMP ---
+            # *** Tests de SNMP ***
             "Retrieve Full SNMP Configuration": [],
             "Execute Full SNMP Configuration": [
                 "SNMP_AGENT_STATE", "TRAPS_ENABLE_STATE", "TPU_SNMP_PORT", 
@@ -175,7 +175,7 @@ class ModernTestRunnerApp(ctk.CTk):
                 "SNMP_V3_WRITE_AUTH", "HOSTS_CONFIG_STR"
             ],
 
-            # --- Tests de Alineación (Alignment) ---
+            # *** Tests de Alineación (Alignment) ***
             "Input Activation": ["ACTIVATE_DEACTIVATE", "DURATION", "INPUTS_LIST"],
             "Retrieve Inputs Activation State": [],
             "Current Loop and Blocking State": [],
@@ -190,24 +190,30 @@ class ModernTestRunnerApp(ctk.CTk):
                 "ACTIVATE_DEACTIVATE_BLOCKING", 
                 "BLOCKING_DURATION"
             ],
-            # --- Tests HIL ---
+            # *** Tests HIL ***
             "Send Input Command": ["RASPBERRY_PI_IP: COMMAND_STR:PULSE_BATCH,<t>,<pin_id1>,<pin_id2>,... NETWORK_PROFILE:NOISE"],
             # "Ejecutar Rafaga De Rendimiento": ["NUM_PULSES: CHANNEL: PULSE_DURATION: LOOP_DELAY:"], # Antiguo, para un solo canal
             "Ejecutar Rafaga De Rendimiento": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
-            "Ejecutar Rafaga De Rendimiento Multicanal": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
             "Ejecutar Rafaga GUI": ["CHANNELS_STR: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
             "Escenario 4: Prueba de Sensibilidad PWM" : ["CHANNELS_TO_TEST: START: END: NETWORK_PROFILE:NOISE"],
             "Ejecutar Rafaga De Rendimiento Funcional": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
-            "Ejecutar Rafaga De Rendimiento Funcional Multicanal": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
             "Ejecutar Pruebas de Rendimiento Dev&Functional" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
+            
+            
+            # Pruebas multicanal
+            "Ejecutar Rafaga De Rendimiento Funcional Multicanal": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
+            "Ejecutar Rafaga De Rendimiento Multicanal": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: NETWORK_PROFILE:NOISE"],
+            "WP2 Escenario B: Validación de Aislamiento y Diafonía": ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY: MAX_LATENCY_THRESHOLD: NETWORK_PROFILE:NOISE"],
+            
+            # *** Tests Inyeccion Ruido Netstorm ***
+            "Configurar Perfil Personalizado (Universal)": ["PROFILE_NAME: NOISE_PORT: LOSS_MODE: LOSS_PROBABILITY: BURST_LENGTH: BURST_SEPARATION: ALTERNATIVE_LOSS_PROB: MEAN_LENGTH: MEAN_ALTERNATIVE_LENGTH: DELAY_MODE: FIXED_DELAY: MIN_DELAY: MAX_DELAY: AVG_DELAY: REORDENING: BANDWIDTH_MODE: BANDWIDTH_MODE: FRAME_RATE: MAX_BURST_SIZE_FR: DUPLICATION_MODE: DUPLICATION_PROBABILITY: ERROR_MODE: ERROR_PROBABILITY:"],
             "WP3 Escenario B Loss_Brakepoint" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
             "WP3 Escenario C Tormenta_Red" : ["CHANNELS_TO_TEST: NUM_PULSES: PULSE_DURATION: LOOP_DELAY:"],
+
+            # *** Tests de Inyección de Ruido Analógico ***
+            "Verify Security Against Spurious Noise" : ["CHANNEL_T5: NOISE_AMPLITUDE: PRE_NOISE_DELAY: NOISE_DURATION: POST_NOISE_DELAY:"],
             
-            # --- Tests Inyeccion Ruido Netstorm---
-            "Configurar Perfil Personalizado (Universal)": ["PROFILE_NAME: NOISE_PORT: LOSS_MODE: LOSS_PROBABILITY: BURST_LENGTH: BURST_SEPARATION: ALTERNATIVE_LOSS_PROB: MEAN_LENGTH: MEAN_ALTERNATIVE_LENGTH: DELAY_MODE: FIXED_DELAY: MIN_DELAY: MAX_DELAY: AVG_DELAY: REORDENING: BANDWIDTH_MODE: BANDWIDTH_MODE: FRAME_RATE: MAX_BURST_SIZE_FR: DUPLICATION_MODE: DUPLICATION_PROBABILITY: ERROR_MODE: ERROR_PROBABILITY:"],
-                 
-            
-            # --- Tests de Registro Cronológico ---
+            # *** Tests de Registro Cronológico ***
             "Retrieve Chronological Register": [],
             "Delete Chronological Register": [],
             "Capture Last Chronological Log Entries": [
@@ -216,7 +222,7 @@ class ModernTestRunnerApp(ctk.CTk):
                 "CHRONO_ORDER"
             ],
 
-            # --- Tests de Módulo IBTU BYTONES ---
+            # *** Tests de Módulo IBTU BYTONES ***
             "Retrieve IBTU ByTones Full Configuration": [],
             "Program IBTU ByTones S1 General": [
                 "RX_OPERATION_MODE", 
@@ -846,7 +852,7 @@ class ModernTestRunnerApp(ctk.CTk):
                         log_entry += f"  - {simple_key}: {value}\n"
                 except json.JSONDecodeError:
                     log_entry += f"  - Varbinds (raw): {varbinds_str}\n"
-                log_entry += "---\n"
+                log_entry += "***\n"
                 self.db_display_textbox.insert("end", log_entry)
 
         self.db_display_textbox.configure(state="disabled")

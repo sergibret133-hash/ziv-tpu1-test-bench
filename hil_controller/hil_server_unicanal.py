@@ -128,7 +128,7 @@ def t0_callback_handler(channel, timestamp):
     "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T0"
     if logging_active:
         t0_logs.append(time.time_ns())
-        
+
 def t5_callback_handler(channel, timestamp):
     "Se ejecuta automáticamente al detectar flanco en el pin de Feedback T5"
     if logging_active:

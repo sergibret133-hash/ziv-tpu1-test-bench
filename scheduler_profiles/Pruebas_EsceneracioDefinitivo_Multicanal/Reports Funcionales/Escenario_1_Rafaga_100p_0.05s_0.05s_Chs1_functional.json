@@ -1,0 +1,38 @@
+[
+    {
+        "type": "Ejecutar Test",
+        "name": "Ejecutar Rafaga De Rendimiento Funcional Multicanal (Sesi\u00f3n: A)",
+        "on_fail": "Detener secuencia",
+        "session_id": "A",
+        "file": "HIL_Tests.robot",
+        "vars": "CHANNELS_TO_TEST:1 NUM_PULSES:100 PULSE_DURATION:0.05 LOOP_DELAY:0.05 MAX_LATENCY_THRESHOLD:8",
+        "param": ""
+    },
+    {
+        "type": "Pausa (segundos)",
+        "name": "PAUSA: 3 segundos",
+        "on_fail": "Detener secuencia",
+        "session_id": null,
+        "file": "",
+        "vars": "",
+        "param": 3
+    },
+    {
+        "type": "Verificar Traps SNMP Nuevos",
+        "name": "Verificar Traps SNMP Nuevos(Sesi\u00f3n: A)",
+        "on_fail": "Continuar",
+        "session_id": "A",
+        "file": "",
+        "vars": "",
+        "param": null
+    },
+    {
+        "type": "Verificar Traps SNMP Nuevos",
+        "name": "Verificar Traps SNMP Nuevos(Sesi\u00f3n: B)",
+        "on_fail": "Continuar",
+        "session_id": "B",
+        "file": "",
+        "vars": "",
+        "param": null
+    }
+]

@@ -894,16 +894,40 @@ def generate_functional_report(rpi_logs, all_traps_a, all_traps_b, max_latency_t
     Args:
         max_latency_threshold_ms: Límite en ms. Si Latencia > limite -> FAIL.
     """
+    print(f"\n[DEBUG PYTHON {file_suffix}] Inicio Reporte. Traps A: {len(all_traps_a)}, Traps B: {len(all_traps_b)}")
+    
+    t0_epochs_debug = [float(t)/1e9 for t in rpi_logs.get('t0_ns', []) if t]
+    if len(t0_epochs_debug) > 0:
+        print(f"[DEBUG PYTHON] Primer T0 (Físico RPi): {t0_epochs_debug[0]:.4f} s")
+    else:
+        print("[DEBUG PYTHON] ¡ALERTA! No hay logs T0 en este canal.")
+    
+    
+    
+    
     # *** PARSEO Y CLASIFICACIÓN DE DATOS (hacemos lo mismo que en burst report)
     traps_by_type = {"T1": [], "T2": [], "T3": [], "T4": []}
     
+    debug_trap_count = 0
     # Procesamos Traps A y B
     for trap in all_traps_a + all_traps_b:
         t_type, t_time, t_val = _extract_trap_type_and_time(trap)
+        
+        debug_trap_count += 1
+        if debug_trap_count <= 3: # Solo imprimimos los 3 primeros para no saturar
+            print(f"[DEBUG TRAP] Raw Type: {t_type}, TimeStr: {t_time}, Val: {t_val}")
+            
         if t_type and (t_val == '1' or t_val is None):
             epoch_t = _to_epoch(t_time)
-            if epoch_t: traps_by_type[t_type].append(epoch_t)
-
+            if epoch_t:
+                traps_by_type[t_type].append(epoch_t)
+                # DEBUG DE TIEMPO
+                if debug_trap_count <= 3 and len(t0_epochs_debug) > 0:
+                    diff = epoch_t - t0_epochs_debug[0]
+                    print(f"[DEBUG TIME] Trap Epoch: {epoch_t:.4f} s | Diferencia vs T0: {diff*1000:.2f} ms")
+                    
+    print(f"[DEBUG RESUMEN] Clasificados -> T1: {len(traps_by_type['T1'])}, T2: {len(traps_by_type['T2'])}, T3: {len(traps_by_type['T3'])}, T4: {len(traps_by_type['T4'])}")                
+    
     # Procesamos Logs RPi
     t0_epochs = [float(t)/1e9 for t in rpi_logs.get('t0_ns', []) if t]
     t5_epochs = [float(t)/1e9 for t in rpi_logs.get('t5_ns', []) if t]

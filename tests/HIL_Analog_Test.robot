@@ -13,6 +13,12 @@ ${CMD_DURATION}     0.1     # Duración del pulso de disparo (s)
 ${RELAY_T0}         1       # ID del Relé que simula el disparo (Input TPU)
 ${CHANNEL_T5}       1       # ID del Canal que lee la salida T5 (Output TPU)
 
+${NOISE_AMPLITUDE}    0.8     # Amplitud del ruido para la prueba de seguridad
+
+${PRE_NOISE_DELAY}    1.0     # Tiempo de espera antes de iniciar la inyección de ruido (s)
+${NOISE_DURATION}    5.0     # Duración de la inyección de ruido (s)
+${POST_NOISE_DELAY}   1.0     # Tiempo de espera después de detener la inyección de ruido (s)
+
 ${RASPBERRY_PI_IP}    10.212.42.42
 *** Test Cases ***
 # *** ESCENARIO A: SEGURIDAD (SECURITY) ***
@@ -27,14 +33,19 @@ Verify Security Against Spurious Noise
     Send Hil Command    ${RASPBERRY_PI_IP}    CONFIG_LOG,T5,${CHANNEL_T5}
     Send Hil Command    ${RASPBERRY_PI_IP}    START_LOG
 
+    Sleep    ${PRE_NOISE_DELAY}
+
     # Iniciamos inyección de ruido
-    Start Analog Noise Injection    0.8
+    Start Analog Noise Injection    ${NOISE_AMPLITUDE}
 
     # Esperamos tiempo de prueba. Para la demo dejaremos 10s
-    Sleep    10s
+    Sleep    ${NOISE_DURATION}
 
     # Detenemos inyección de ruido
     Stop Analog Noise Injection
+
+    Sleep    ${POST_NOISE_DELAY}
+
     # Detenemos logs
     Send Hil Command    ${RASPBERRY_PI_IP}    STOP_LOG
 
